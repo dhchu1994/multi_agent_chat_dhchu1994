@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent Leadership Simulation — clickable prototype v2</title>
+<style>
+  :root{
+    --bg:#faf9f7; --surface:#ffffff; --surface-2:#f3f2ef;
+    --border:#e3e1db; --border-strong:#c9c6be;
+    --text-primary:#211f1c; --text-secondary:#6b6863; --text-muted:#9a978f;
+    --accent:#2f5fd6; --accent-bg:#e9eefc; --accent-text:#1d3f9e;
+    --warn-bg:#fbeaea; --warn-text:#9a2c2c;
+    --ok-bg:#e8f3ea; --ok-text:#276a3c;
+    --radius:10px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:var(--font); background:var(--bg); color:var(--text-primary); -webkit-font-smoothing:antialiased;}
+  .app{max-width:1040px; margin:0 auto; padding:0 24px 90px;}
+  .topbar{position:sticky; top:0; background:var(--bg); padding:18px 0 12px; z-index:5; border-bottom:1px solid var(--border); margin-bottom:26px;}
+  h1.title{font-size:15px; font-weight:500; margin:0 0 12px; color:var(--text-secondary);}
+  .progress{display:flex; gap:5px; flex-wrap:wrap;}
+  .progress .step{font-size:11px; padding:4px 9px; border-radius:999px; border:1px solid var(--border); color:var(--text-muted); white-space:nowrap;}
+  .progress .step.active{border-color:var(--accent); color:var(--accent-text); background:var(--accent-bg); font-weight:500;}
+  .progress .step.done{color:var(--text-secondary); border-color:var(--border-strong);}
+  .screen{display:none;}
+  .screen.visible{display:block;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px 32px;}
+  .card + .card{margin-top:16px;}
+  h2{font-size:20px; font-weight:500; margin:0 0 6px;}
+  h3.sub{font-size:14px; font-weight:500; margin:18px 0 4px; color:var(--text-primary);}
+  p{line-height:1.7; color:var(--text-secondary); font-size:14.5px;}
+  .muted-note{font-size:12.5px; color:var(--text-muted); background:var(--surface-2); border-radius:8px; padding:8px 12px; margin-top:14px; line-height:1.5;}
+  button{font-family:var(--font); font-size:13.5px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text-primary); padding:9px 16px; cursor:pointer;}
+  button:hover{background:var(--surface-2);}
+  button:disabled{opacity:0.45; cursor:not-allowed;}
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  button.primary:hover{background:var(--accent-text);}
+  .row{display:flex; gap:10px; justify-content:flex-end; margin-top:22px;}
+  .row.spread{justify-content:space-between;}
+  label{font-size:14px;}
+  input[type="text"], textarea{width:100%; font-family:var(--font); font-size:14px; padding:10px 12px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface);}
+  textarea{resize:vertical; min-height:90px; line-height:1.55;}
+  input[type="text"]:focus, textarea:focus, input[type="text"].spotlight{outline:none; border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-bg);}
+
+  .consent-list{margin:14px 0 0; padding-left:18px;}
+  .consent-list li{font-size:14px; color:var(--text-secondary); margin-bottom:6px;}
+  .consent-check{display:flex; align-items:flex-start; gap:10px; margin-top:20px; font-size:14px;}
+  .consent-check input{margin-top:3px;}
+
+  .briefing-text{font-size:15px; line-height:1.8; color:var(--text-primary); max-width:640px;}
+  .timer-note{font-size:13px; color:var(--text-muted); margin-top:18px;}
+
+  .team-top{margin-bottom:16px;}
+  .agent-card{background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;}
+  .agent-head{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .avatar{width:38px; height:38px; border-radius:50%; background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:500; color:var(--text-secondary); flex-shrink:0;}
+  .agent-name{font-size:14px; font-weight:500; margin:0;}
+  .agent-role{font-size:12px; color:var(--text-muted); margin:0;}
+  .agent-desc{font-size:13px; color:var(--text-secondary); margin:0; padding-top:10px; border-top:1px solid var(--border); line-height:1.55;}
+  .team-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+
+  .tut-progress{display:flex; gap:6px; margin-bottom:16px;}
+  .tut-dot{width:26px; height:4px; border-radius:2px; background:var(--border);}
+  .tut-dot.done{background:var(--border-strong);}
+  .tut-dot.current{background:var(--accent);}
+  .tut-context{background:var(--surface-2); border-radius:10px; padding:14px 16px; opacity:0.5; min-height:40px;}
+  .bubble{display:flex; gap:8px; margin-bottom:8px; font-size:13px;}
+  .bubble .avatar{width:26px; height:26px; font-size:11px;}
+  .bubble .text{background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:7px 11px; max-width:75%;}
+  .bubble.self{flex-direction:row-reverse;}
+  .callout{background:var(--accent-bg); color:var(--accent-text); border-radius:8px; padding:11px 14px; margin-top:10px; font-size:13px; line-height:1.6;}
+  .callout strong{display:block; margin-bottom:3px; font-weight:500;}
+  .warn-line{color:var(--warn-text); font-size:12.5px; margin-top:8px;}
+  .mention-wrap{position:relative;}
+  .mention-drop{position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--surface); border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; z-index:10; display:none;}
+  .mention-drop .opt{padding:8px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;}
+  .mention-drop .opt:hover{background:var(--surface-2);}
+  .mention-drop .opt .avatar{width:20px; height:20px; font-size:10px;}
+
+  .q-block{margin-bottom:20px;}
+  .q-title{font-size:14px; font-weight:500; margin-bottom:8px;}
+  .q-opt{display:flex; align-items:center; gap:8px; font-size:13.5px; padding:6px 0; color:var(--text-secondary); cursor:pointer;}
+  .result-box{font-size:13px; margin-top:10px; padding:10px 14px; border-radius:8px; display:none;}
+  .result-box.ok{display:block; background:var(--ok-bg); color:var(--ok-text);}
+  .result-box.warn{display:block; background:var(--warn-bg); color:var(--warn-text);}
+
+  .cond-card{background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px;}
+  .cond-tag{display:inline-block; font-size:11px; padding:3px 9px; border-radius:999px; background:var(--accent-bg); color:var(--accent-text); margin-bottom:10px;}
+
+  .likert-item{border-bottom:1px solid var(--border); padding:14px 0;}
+  .likert-item:last-child{border-bottom:none;}
+  .likert-text{font-size:13.5px; margin-bottom:10px; color:var(--text-primary);}
+  .likert-scale{display:flex; justify-content:space-between; align-items:center; gap:4px;}
+  .likert-scale .lend{font-size:11px; color:var(--text-muted); width:90px;}
+  .likert-scale .lend.right{text-align:right;}
+  .likert-opts{display:flex; gap:10px; flex:1; justify-content:center;}
+  .likert-opts label{display:flex; flex-direction:column; align-items:center; font-size:10.5px; color:var(--text-muted); gap:3px; cursor:pointer;}
+
+  .live-grid{display:grid; grid-template-columns:230px 1fr 230px; gap:16px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; font-size:13.5px;}
+  .panel-head{display:flex; justify-content:space-between; align-items:center; cursor:pointer; margin-bottom:0;}
+  .panel-head h3{font-size:13.5px; margin:0; font-weight:500;}
+  .panel-body{margin-top:10px; color:var(--text-secondary); line-height:1.7; font-size:13px;}
+  .panel-body.collapsed{display:none;}
+  .mini-agent{padding:9px 0; border-bottom:1px solid var(--border);}
+  .mini-agent:last-child{border-bottom:none;}
+  .mini-agent .agent-name{font-size:13px;}
+  .mini-agent .agent-role{font-size:11.5px;}
+  .chat-col{display:flex; flex-direction:column; height:520px;}
+  .chat-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .timer-badge{font-size:12px; color:var(--text-secondary); background:var(--surface-2); padding:4px 10px; border-radius:999px;}
+  .chat-box{flex:1; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; overflow-y:auto; margin-bottom:10px;}
+  .chat-input-row{display:flex; gap:8px;}
+  .chat-input-row button{white-space:nowrap;}
+  @media (max-width: 880px){
+    .live-grid{grid-template-columns:1fr;}
+    .chat-col{height:420px;}
+  }
+
+  .debrief-link{display:inline-block; margin-top:16px; color:var(--accent-text); text-decoration:none; font-size:14px; border-bottom:1px solid var(--accent-text);}
+
+  .eventlog{position:fixed; left:0; right:0; bottom:0; background:var(--surface); border-top:1px solid var(--border); z-index:20;}
+  .eventlog-toggle{width:100%; text-align:left; border:none; border-radius:0; background:var(--surface-2); font-size:12.5px; padding:8px 24px; color:var(--text-secondary);}
+  .eventlog-body{max-height:160px; overflow-y:auto; padding:8px 24px 14px; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:var(--text-muted);}
+  .eventlog-body div{padding:2px 0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <h1 class="title">Multi-Agent Leadership Simulation — clickable prototype v2 (10 screens)</h1>
+    <div class="progress" id="progress"></div>
+  </div>
+
+  <!-- 1 CONSENT -->
+  <section class="screen" id="screen-consent">
+    <div class="card">
+      <h2>Consent to Participate in Research</h2>
+      <p>You are invited to participate in a research study examining how people interact with multiple AI agents during creative tasks.</p>
+      <p>The study will take approximately 60 minutes. You will complete a creative design task with AI teammates and may be asked to provide brief feedback about your experience. Your responses and chat activity will be recorded and analyzed for research purposes.</p>
+      <p>Participation is voluntary. You may stop participating or withdraw from the study at any time without penalty. The study involves no anticipated risks beyond those associated with ordinary computer use. You will receive the stated compensation upon completion of the study.</p>
+      <p>All collected data will be kept confidential and stored securely. The data will be used solely for academic research and may be reported in academic publications or presentations only in anonymized or aggregated form. No information that could identify you personally will be disclosed.</p>
+      <p>By selecting "I agree" below, you confirm that you have read and understood the information above, are at least 18 years old, and voluntarily consent to participate in this study.</p>
+      <div class="consent-check">
+        <input type="checkbox" id="consent-box">
+        <label for="consent-box">I have read the information above and consent to participate in this study.</label>
+      </div>
+      <div class="row"><button class="primary" id="consent-continue" disabled onclick="goTo('briefing')">Continue</button></div>
+    </div>
+  </section>
+
+  <!-- 2 TASK BRIEFING -->
+  <section class="screen" id="screen-briefing">
+    <div class="card">
+      <h2>Your task</h2>
+      <div class="briefing-text">
+        <p>A local supermarket wants to design a poster encouraging customers to buy "ugly" fruits and vegetables — produce that is fresh, nutritious, and safe but overlooked or wasted simply because its appearance does not meet conventional standards.</p>
+        <p>Through the poster, the supermarket wants to communicate a clear message: imperfect-looking produce still has edible value, and buying it helps customers get fresh ingredients at more affordable prices while reducing food waste.</p>
+        <p>You are the team leader. You will work with four AI teammates: your goal is to design a proposal that is both <strong>novel</strong> and <strong>useful</strong>, reviewing your teammates' contributions, guiding the discussion, and making the final decisions. The task should take about 45 minutes.</p>
+      </div>
+      <div class="timer-note" id="briefing-timer-note">You can continue in <span id="briefing-count">8</span>s — please read carefully.</div>
+      <div class="muted-note">Prototype note: 8-second demo delay, standing in for the real 45–60s. Also note this screen is re-shown (with the timer reset) if the comprehension check that follows is answered incorrectly.</div>
+      <div class="row"><button class="primary" id="briefing-continue" style="display:none;" onclick="goTo('check1')">Continue</button></div>
+    </div>
+  </section>
+
+  <!-- 3 CHECK 1: TASK -->
+  <section class="screen" id="screen-check1">
+    <div class="card">
+      <h2>Quick check: the task</h2>
+      <p>All four questions must be answered correctly to continue. If any answer is incorrect, you'll be asked to review the task briefing again before retrying.</p>
+
+      <div class="q-block">
+        <div class="q-title">1. What is the main purpose of the task?</div>
+        <label class="q-opt"><input type="radio" name="c1q1" value="a"> To design a marketing campaign for luxury food products</label>
+        <label class="q-opt"><input type="radio" name="c1q1" value="b"> To propose an entrepreneurship plan for selling or using ugly fruit and vegetables in a supermarket</label>
+        <label class="q-opt"><input type="radio" name="c1q1" value="c"> To evaluate the nutritional value of different vegetables</label>
+        <label class="q-opt"><input type="radio" name="c1q1" value="d"> To reorganize the supermarket's fruit and vegetable section</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">2. What is the composition of the team?</div>
+        <label class="q-opt"><input type="radio" name="c1q2" value="a"> Four human members and one AI leader</label>
+        <label class="q-opt"><input type="radio" name="c1q2" value="b"> One human member and four AI agents, with the human acting as the team leader</label>
+        <label class="q-opt"><input type="radio" name="c1q2" value="c"> Five AI agents with no human member</label>
+        <label class="q-opt"><input type="radio" name="c1q2" value="d"> Five human members with equal roles</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">3. What is the role of the human team member?</div>
+        <label class="q-opt"><input type="radio" name="c1q3" value="a"> To observe the discussion without participating</label>
+        <label class="q-opt"><input type="radio" name="c1q3" value="b"> To follow the AI agents' decisions without making changes</label>
+        <label class="q-opt"><input type="radio" name="c1q3" value="c"> To lead the team, review the agents' contributions, guide the discussion, and make the final decisions</label>
+        <label class="q-opt"><input type="radio" name="c1q3" value="d"> To complete the entire task without assistance from the AI agents</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">4. How much time is available to complete the task?</div>
+        <label class="q-opt"><input type="radio" name="c1q4" value="a"> 30 minutes</label>
+        <label class="q-opt"><input type="radio" name="c1q4" value="b"> 45 minutes</label>
+        <label class="q-opt"><input type="radio" name="c1q4" value="c"> 60 minutes</label>
+        <label class="q-opt"><input type="radio" name="c1q4" value="d"> There is no time limit</label>
+      </div>
+
+      <div class="result-box" id="check1-result"></div>
+      <div class="row spread">
+        <button id="check1-review" style="display:none;" onclick="goTo('briefing')">Review task briefing again</button>
+        <button class="primary" onclick="evaluateCheck('check1', {c1q1:'b',c1q2:'b',c1q3:'c',c1q4:'b'}, 'team')">Check answers</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 MEET YOUR TEAM -->
+  <section class="screen" id="screen-team">
+    <div class="card">
+      <h2>Meet your team</h2>
+      <p>These are your AI-powered teammates for this task.</p>
+      <div class="team-top">
+        <div class="agent-card">
+          <div class="agent-head"><div class="avatar">C</div><div><p class="agent-name">Coordinator</p><p class="agent-role">Coordinator agent</p></div></div>
+          <p class="agent-desc">Helps organize the discussion, keep track of progress, and summarize the team's decisions.</p>
+        </div>
+      </div>
+      <div class="team-grid" id="team-grid"></div>
+      <div class="muted-note">All four teammates are AI-powered agents who will work with you on this task.</div>
+      <div class="row spread">
+        <button onclick="shuffleTeam()">Shuffle order (demo of counterbalancing)</button>
+        <button class="primary" onclick="goTo('check2')">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 CHECK 2: TEAM -->
+  <section class="screen" id="screen-check2">
+    <div class="card">
+      <h2>Quick check: your team</h2>
+      <p>All four questions must be answered correctly to continue. If any answer is incorrect, you'll be asked to review the team page again before retrying.</p>
+
+      <div class="q-block">
+        <div class="q-title">1. Who are the four individuals introduced on the previous screen?</div>
+        <label class="q-opt"><input type="radio" name="c2q1" value="a"> Human participants who will evaluate your work</label>
+        <label class="q-opt"><input type="radio" name="c2q1" value="b"> AI-powered teammates who will work with you on the task</label>
+        <label class="q-opt"><input type="radio" name="c2q1" value="c"> Supermarket employees who created the task</label>
+        <label class="q-opt"><input type="radio" name="c2q1" value="d"> Researchers who will observe the discussion</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">2. How many AI-powered teammates are part of your team?</div>
+        <label class="q-opt"><input type="radio" name="c2q2" value="a"> Two</label>
+        <label class="q-opt"><input type="radio" name="c2q2" value="b"> Three</label>
+        <label class="q-opt"><input type="radio" name="c2q2" value="c"> Four</label>
+        <label class="q-opt"><input type="radio" name="c2q2" value="d"> Five</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">3. Why might the order of the AI teammates differ across participants?</div>
+        <label class="q-opt"><input type="radio" name="c2q3" value="a"> Some AI teammates are more important than others</label>
+        <label class="q-opt"><input type="radio" name="c2q3" value="b"> The order is randomized or counterbalanced to reduce position-related effects on attention and trust</label>
+        <label class="q-opt"><input type="radio" name="c2q3" value="c"> The order depends on which teammate performs best</label>
+        <label class="q-opt"><input type="radio" name="c2q3" value="d"> Participants are expected to rank the teammates by preference</label>
+      </div>
+      <div class="q-block">
+        <div class="q-title">4. Which statement best describes how the AI teammates are presented?</div>
+        <label class="q-opt"><input type="radio" name="c2q4" value="a"> Some teammates receive larger cards and longer descriptions because they have more authority</label>
+        <label class="q-opt"><input type="radio" name="c2q4" value="b"> All teammates are presented using cards of equal visual size and descriptions of approximately equal length</label>
+        <label class="q-opt"><input type="radio" name="c2q4" value="c"> The human leader selects which teammate cards to view</label>
+        <label class="q-opt"><input type="radio" name="c2q4" value="d"> The AI nature of the teammates is not disclosed to participants</label>
+      </div>
+
+      <div class="result-box" id="check2-result"></div>
+      <div class="row spread">
+        <button id="check2-review" style="display:none;" onclick="goTo('team')">Review team page again</button>
+        <button class="primary" onclick="evaluateCheck('check2', {c2q1:'b',c2q2:'c',c2q3:'b',c2q4:'b'}, 'tutorial')">Check answers</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 TUTORIAL -->
+  <section class="screen" id="screen-tutorial">
+    <div class="card">
+      <h2>How to use this interface</h2>
+      <div class="tut-progress" id="tut-progress"></div>
+
+      <div class="tut-step" id="tut-step-1">
+        <div class="tut-context"><p style="margin:0; font-size:12.5px;">No messages yet — this is where the conversation will appear.</p></div>
+        <div class="mention-wrap" style="margin-top:14px;"><input type="text" class="spotlight" id="tut1-input" placeholder="Type a message to the whole team..."></div>
+        <div class="callout"><strong>Send a message to the whole team</strong>Type a message and press send. All four teammates will read it and can respond. Try sending a practice message now.</div>
+        <div class="row spread"><span></span><button class="primary" onclick="tut1Send()">Send practice message</button></div>
+      </div>
+
+      <div class="tut-step" id="tut-step-2" style="display:none;">
+        <div class="tut-context" id="tut2-context"></div>
+        <div class="mention-wrap" style="margin-top:14px;">
+          <input type="text" class="spotlight" id="tut2-input" placeholder="@Alice ..." oninput="onMentionInput('tut2-input','tut2-drop')">
+          <div class="mention-drop" id="tut2-drop"></div>
+        </div>
+        <div class="callout"><strong>Direct a message to one teammate</strong>Type @ followed by a name to ask only that teammate. Try @Alice with any question, then send.</div>
+        <div class="warn-line" id="tut2-warn" style="display:none;">Try starting your message with @Alice.</div>
+        <div class="row spread"><button onclick="showTutStep(1)">Back</button><button class="primary" onclick="tut2Send()">Send practice message</button></div>
+      </div>
+
+      <div class="tut-step" id="tut-step-3" style="display:none;">
+        <div class="tut-context" id="tut3-context"></div>
+        <div class="mention-wrap" style="margin-top:14px;">
+          <input type="text" class="spotlight" id="tut3-input" placeholder="@Picasso generate ..." oninput="onMentionInput('tut3-input','tut3-drop')">
+          <div class="mention-drop" id="tut3-drop"></div>
+        </div>
+        <div class="callout"><strong>Generate an image</strong>Only Picasso can generate images. Ask by name, e.g. @Picasso generate a rough sketch of the layout.</div>
+        <div class="warn-line" id="tut3-warn" style="display:none;">Ask @Picasso specifically, and include the word "generate".</div>
+        <div class="row spread"><button onclick="showTutStep(2)">Back</button><button class="primary" onclick="tut3Send()">Send practice message</button></div>
+      </div>
+
+      <div class="tut-step" id="tut-step-4" style="display:none;">
+        <div class="tut-context"><div class="bubble"><div class="avatar">B</div><div class="text">Thinking through a headline that emphasizes freshness and value at the same time, maybe something like...</div></div></div>
+        <div class="row" style="margin-top:14px; justify-content:flex-start; gap:8px;">
+          <input type="text" style="flex:1;" placeholder="Type here to pause anytime...">
+          <button onclick="tut4Pause()">Pause</button>
+        </div>
+        <div class="callout"><strong>Pause anytime</strong>Click pause, or just start typing, to stop the teammates and take a moment. Sending a message always resumes the conversation.</div>
+        <div class="result-box ok" id="tut4-paused-note">Paused — teammates are waiting for your next message.</div>
+        <div class="row spread"><button onclick="showTutStep(3)">Back</button><button class="primary" id="tut4-continue" disabled onclick="goTo('manipulation')">Continue</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 MANIPULATION: LEADERSHIP ROLE -->
+  <section class="screen" id="screen-manipulation">
+    <div class="card">
+      <h2>Your leadership role</h2>
+      <p id="cond-label" class="cond-tag"></p>
+      <div class="cond-card" id="cond-content"></div>
+      <div id="cond-reflection-wrap" style="display:none;">
+        <h3 class="sub">Your reflection</h3>
+        <textarea id="cond-reflection" placeholder="Write a few sentences here..." oninput="onReflectionInput()"></textarea>
+      </div>
+      <div class="muted-note">Prototype note: condition assignment is randomized client-side here for demo purposes only — in production this should be assigned once per participant and logged server-side. The prompt text below is a draft interpretation of your four MK conditions, not validated wording — please replace with the exact script from your manipulation document.</div>
+      <div class="row spread">
+        <button onclick="assignCondition()">Reassign condition (demo)</button>
+        <button class="primary" id="cond-continue" onclick="goTo('check3')">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 CHECK 3: REFLECTION SCALE (not right/wrong) -->
+  <section class="screen" id="screen-check3">
+    <div class="card">
+      <h2>A few questions about your approach</h2>
+      <p>Please indicate how much you agree with each statement. There are no right or wrong answers — all 14 must be answered to continue.</p>
+      <div id="likert-list"></div>
+      <div class="result-box" id="check3-result"></div>
+      <div class="row"><button class="primary" onclick="evaluateReflectionScale()">Continue</button></div>
+    </div>
+  </section>
+
+  <!-- 9 LIVE TASK -->
+  <section class="screen" id="screen-live">
+    <div class="live-grid">
+      <div class="panel">
+        <div class="panel-head" onclick="toggle('task-panel-body','task-arrow')"><h3>Task</h3><span id="task-arrow">▾</span></div>
+        <div class="panel-body" id="task-panel-body">
+          Design a proposal for "ugly" but edible fruits and vegetables. It should be both novel (creative, attention-grabbing) and useful (clearly conveys the message, helps reduce food waste and encourage purchases).
+        </div>
+      </div>
+      <div class="chat-col">
+        <div class="chat-top"><strong style="font-size:14px;">Chatbot</strong><span class="timer-badge">Elapsed: <span id="live-timer">00:00</span></span></div>
+        <div class="chat-box" id="live-chat-box"></div>
+        <div class="mention-wrap chat-input-row">
+          <input type="text" id="live-input" placeholder="Type your message..." oninput="onMentionInput('live-input','live-drop')" style="flex:1;">
+          <div class="mention-drop" id="live-drop"></div>
+          <button onclick="liveSend()">Send</button>
+          <button>Pause</button>
+        </div>
+        <div class="muted-note">Prototype note: this panel is a placeholder. In production it connects to the real multi-agent backend, not scripted replies.</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head" onclick="toggle('team-panel-body','team-arrow')"><h3>Agents</h3><span id="team-arrow">▾</span></div>
+        <div class="panel-body" id="team-panel-body">
+          <div class="mini-agent"><p class="agent-name">Coordinator</p><p class="agent-role">Coordinator agent</p></div>
+          <div class="mini-agent"><p class="agent-name">Alice</p><p class="agent-role">Marketing agent</p></div>
+          <div class="mini-agent"><p class="agent-name">Bob</p><p class="agent-role">Copywriting agent</p></div>
+          <div class="mini-agent"><p class="agent-name">Picasso</p><p class="agent-role">Graphic design agent</p></div>
+        </div>
+        <div class="panel-head" onclick="toggle('tips-panel-body','tips-arrow')" style="margin-top:14px;"><h3>Tips</h3><span id="tips-arrow">▾</span></div>
+        <div class="panel-body" id="tips-panel-body">Use @name to direct a question. Only @Picasso can generate images. Pause anytime by clicking Pause or typing.</div>
+      </div>
+    </div>
+    <div class="row"><button class="primary" onclick="goTo('debrief')">Finish task (demo)</button></div>
+  </section>
+
+  <!-- 10 DEBRIEF -->
+  <section class="screen" id="screen-debrief">
+    <div class="card">
+      <h2>Thank you</h2>
+      <p>That's the end of the task. Please continue to a short exit survey to finish the study — it takes about 5 minutes.</p>
+      <a class="debrief-link" href="https://example.qualtrics.com/jfe/form/SV_demo?participant_id=DEMO123" target="_blank">Continue to exit survey ↗</a>
+      <div class="muted-note">Prototype note: the participant/session ID should be appended as a URL parameter here so app logs and Qualtrics responses can be merged later.</div>
+    </div>
+  </section>
+
+</div>
+
+<div class="eventlog">
+  <button class="eventlog-toggle" onclick="toggleLog()">Event log (demo) — shows what a real timestamp log could capture ▾</button>
+  <div class="eventlog-body" id="eventlog-body" style="display:none;"></div>
+</div>
+
+<script>
+var screensOrder = ['consent','briefing','check1','team','check2','tutorial','manipulation','check3','live','debrief'];
+var screenLabels = {consent:'Consent', briefing:'Briefing', check1:'Check 1', team:'Meet team', check2:'Check 2', tutorial:'Tutorial', manipulation:'Role', check3:'Check 3', live:'Live task', debrief:'Debrief'};
+var events = [];
+var agentNames = [
+  {key:'alice', name:'Alice', role:'Marketing agent', initial:'A'},
+  {key:'bob', name:'Bob', role:'Copywriting agent', initial:'B'},
+  {key:'picasso', name:'Picasso', role:'Graphic design agent', initial:'P'},
+  {key:'coordinator', name:'Coordinator', role:'Coordinator agent', initial:'C'}
+];
+var specialists = [
+  {name:'Alice', role:'Marketing agent', initial:'A', desc:'Provides a strategic framework for the campaign and audience insights.'},
+  {name:'Bob', role:'Copywriting agent', initial:'B', desc:'Refines messages, headlines, slogans, and tone of the copy.'},
+  {name:'Picasso', role:'Graphic design agent', initial:'P', desc:'Develops visual concepts, layout, color style, and overall visual effect.'}
+];
+var attempts = {check1:0, check2:0};
+
+function esc(s){ var d=document.createElement('div'); d.innerText=s; return d.innerHTML; }
+function logEvent(name){
+  var t = new Date().toLocaleTimeString();
+  events.push(name + '  —  ' + t);
+  var body = document.getElementById('eventlog-body');
+  body.innerHTML = events.slice().reverse().map(function(e){return '<div>'+esc(e)+'</div>';}).join('');
+}
+function toggleLog(){ var b=document.getElementById('eventlog-body'); b.style.display = b.style.display==='none'?'block':'none'; }
+
+function renderProgress(currentId){
+  var el = document.getElementById('progress');
+  var curIdx = screensOrder.indexOf(currentId);
+  el.innerHTML = screensOrder.map(function(id){
+    var idx = screensOrder.indexOf(id);
+    var cls = 'step';
+    if(id===currentId) cls += ' active'; else if(idx<curIdx) cls += ' done';
+    return '<span class="'+cls+'">'+screenLabels[id]+'</span>';
+  }).join('');
+}
+
+function goTo(id){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('visible'); });
+  document.getElementById('screen-'+id).classList.add('visible');
+  renderProgress(id);
+  logEvent('enter_screen: ' + id);
+  if(id==='briefing') resetBriefingTimer();
+  if(id==='live') startLiveTimer();
+  if(id==='check1'){ clearRadios('c1'); document.getElementById('check1-result').className='result-box'; document.getElementById('check1-review').style.display='none'; }
+  if(id==='check2'){ clearRadios('c2'); document.getElementById('check2-result').className='result-box'; document.getElementById('check2-review').style.display='none'; }
+  if(id==='manipulation') assignCondition();
+  if(id==='check3'){ renderLikert(); document.getElementById('check3-result').className='result-box'; }
+}
+function clearRadios(prefix){
+  document.querySelectorAll('input[name^="'+prefix+'"]').forEach(function(i){ i.checked=false; });
+}
+
+document.getElementById('consent-box').addEventListener('change', function(e){
+  document.getElementById('consent-continue').disabled = !e.target.checked;
+});
+
+var briefingSeconds = 8;
+var briefingInterval = null;
+function resetBriefingTimer(){
+  if(briefingInterval) clearInterval(briefingInterval);
+  briefingSeconds = 8;
+  document.getElementById('briefing-count').innerText = briefingSeconds;
+  document.getElementById('briefing-timer-note').style.display = 'block';
+  document.getElementById('briefing-continue').style.display = 'none';
+  briefingInterval = setInterval(function(){
+    briefingSeconds -= 1;
+    document.getElementById('briefing-count').innerText = briefingSeconds;
+    if(briefingSeconds<=0){
+      clearInterval(briefingInterval);
+      document.getElementById('briefing-timer-note').style.display='none';
+      document.getElementById('briefing-continue').style.display='inline-flex';
+      logEvent('briefing_read_complete');
+    }
+  }, 1000);
+}
+
+function evaluateCheck(name, correctMap, nextScreen){
+  var allCorrect = true;
+  for(var qname in correctMap){
+    var sel = document.querySelector('input[name="'+qname+'"]:checked');
+    if(!sel || sel.value !== correctMap[qname]) allCorrect = false;
+  }
+  var anyMissing = false;
+  for(var qn in correctMap){ if(!document.querySelector('input[name="'+qn+'"]:checked')) anyMissing = true; }
+  var result = document.getElementById(name+'-result');
+  attempts[name] += 1;
+  logEvent(name+'_attempt: '+attempts[name]+' result:'+(allCorrect?'pass':'fail'));
+  if(anyMissing){
+    result.className = 'result-box warn';
+    result.innerText = 'Please answer all questions before checking.';
+    return;
+  }
+  if(allCorrect){
+    result.className = 'result-box ok';
+    result.innerText = 'All correct — continuing.';
+    document.getElementById(name+'-review').style.display = 'none';
+    setTimeout(function(){ goTo(nextScreen); }, 500);
+  } else {
+    result.className = 'result-box warn';
+    result.innerText = 'One or more answers were incorrect. Please review the material again before retrying.';
+    document.getElementById(name+'-review').style.display = 'inline-flex';
+  }
+}
+
+function renderTeam(){
+  var grid = document.getElementById('team-grid');
+  grid.innerHTML = specialists.map(function(a){
+    return '<div class="agent-card"><div class="agent-head"><div class="avatar">'+a.initial+'</div>'+
+      '<div><p class="agent-name">'+a.name+'</p><p class="agent-role">'+a.role+'</p></div></div>'+
+      '<p class="agent-desc">'+a.desc+'</p></div>';
+  }).join('');
+}
+function shuffleTeam(){
+  for(var i=specialists.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=specialists[i]; specialists[i]=specialists[j]; specialists[j]=t; }
+  renderTeam();
+  logEvent('team_order_shuffled');
+}
+renderTeam();
+
+var tutStep = 1;
+function renderTutProgress(){
+  var el = document.getElementById('tut-progress'); var dots='';
+  for(var i=1;i<=4;i++){ var cls='tut-dot'; if(i<tutStep) cls+=' done'; if(i===tutStep) cls+=' current'; dots+='<div class="'+cls+'"></div>'; }
+  el.innerHTML = dots;
+}
+function showTutStep(n){
+  for(var i=1;i<=4;i++){ document.getElementById('tut-step-'+i).style.display = (i===n)?'block':'none'; }
+  tutStep = n; renderTutProgress(); logEvent('tutorial_step_shown: '+n);
+}
+function bubbleHtml(initial, text, self){
+  return '<div class="bubble'+(self?' self':'')+'"><div class="avatar">'+initial+'</div><div class="text">'+esc(text)+'</div></div>';
+}
+function tut1Send(){
+  var v = document.getElementById('tut1-input').value.trim(); if(!v) return;
+  var ctx = document.getElementById('tut-step-1').querySelector('.tut-context');
+  ctx.style.opacity='1';
+  ctx.innerHTML = bubbleHtml('Y',v,true)+bubbleHtml('A','Got it — thinking about the audience angle now.')+bubbleHtml('B','I can start drafting a headline once we align on tone.');
+  logEvent('tutorial_step1_message_sent');
+  setTimeout(function(){ showTutStep(2); }, 500);
+}
+function onMentionInput(inputId, dropId){
+  var input = document.getElementById(inputId); var drop = document.getElementById(dropId);
+  var v = input.value; var at = v.lastIndexOf('@');
+  if(at===-1){ drop.style.display='none'; return; }
+  var frag = v.slice(at+1).toLowerCase();
+  if(frag.indexOf(' ')!==-1){ drop.style.display='none'; return; }
+  var matches = agentNames.filter(function(a){ return a.name.toLowerCase().indexOf(frag)===0; });
+  if(matches.length===0){ drop.style.display='none'; return; }
+  drop.innerHTML = matches.map(function(a){
+    return '<div class="opt" onclick="pickMention(\''+inputId+'\',\''+dropId+'\',\''+a.name+'\')"><div class="avatar">'+a.initial+'</div>'+a.name+' <span style="color:var(--text-muted); font-size:11px;">— '+a.role+'</span></div>';
+  }).join('');
+  drop.style.display='block';
+}
+function pickMention(inputId, dropId, name){
+  var input = document.getElementById(inputId); var v = input.value; var at = v.lastIndexOf('@');
+  input.value = v.slice(0,at+1)+name+' '; document.getElementById(dropId).style.display='none'; input.focus();
+}
+function tut2Send(){
+  var v = document.getElementById('tut2-input').value.trim();
+  var warn = document.getElementById('tut2-warn');
+  if(!/^@alice\b/i.test(v)){ warn.style.display='block'; return; }
+  warn.style.display='none';
+  var ctx = document.getElementById('tut2-context'); ctx.style.opacity='1';
+  ctx.innerHTML = bubbleHtml('Y',v,true)+bubbleHtml('A','Happy to help — I think we should lead with the price benefit, then the sustainability angle.');
+  logEvent('tutorial_step2_mention_success');
+  setTimeout(function(){ showTutStep(3); }, 500);
+}
+function tut3Send(){
+  var raw = document.getElementById('tut3-input').value.trim();
+  var v = raw.toLowerCase();
+  var warn = document.getElementById('tut3-warn');
+  if(v.indexOf('@picasso')===-1 || v.indexOf('generate')===-1){ warn.style.display='block'; return; }
+  warn.style.display='none';
+  var ctx = document.getElementById('tut3-context'); ctx.style.opacity='1';
+  ctx.innerHTML = bubbleHtml('Y',raw,true)+'<div class="bubble"><div class="avatar">P</div><div class="text">Here\'s a rough layout sketch.<br><div style="margin-top:6px; width:140px; height:90px; background:var(--surface-2); border:1px dashed var(--border-strong); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--text-muted);">[generated image]</div></div></div>';
+  logEvent('tutorial_step3_image_generated');
+  setTimeout(function(){ showTutStep(4); }, 500);
+}
+function tut4Pause(){
+  document.getElementById('tut4-paused-note').className = 'result-box ok';
+  document.getElementById('tut4-continue').disabled = false;
+  logEvent('tutorial_step4_pause_used');
+}
+
+var conditions = [
+  {
+    id:1, name:'Condition 1 — Control',
+    text:'You are the team leader for this task. When you\'re ready, begin working with your team below.',
+    reflection:false
+  },
+  {
+    id:2, name:'Condition 2 — Self-focused',
+    text:'Before you begin, take a moment to think about yourself as a leader. For example: how do you usually make decisions? What are your personal strengths and weaknesses? How do you typically cope when a task feels overwhelming or time-pressured?',
+    reflection:true
+  },
+  {
+    id:3, name:'Condition 3 — Externally-focused',
+    text:'Before you begin, take a moment to think about your team and the task ahead. For example: what do you know about how AI teammates like these typically perform? What is the standard approach to a task like this? What alternative strategies could your team take?',
+    reflection:true
+  },
+  {
+    id:4, name:'Condition 4 — Combined',
+    text:'Before you begin, take a moment to reflect on both yourself and your team. Consider your own tendencies as a leader, what you know about your AI teammates and the task, and how your own tendencies might be shaping how you read their input.',
+    reflection:true
+  }
+];
+var currentCondition = null;
+function assignCondition(){
+  currentCondition = conditions[Math.floor(Math.random()*conditions.length)];
+  document.getElementById('cond-label').innerText = currentCondition.name;
+  document.getElementById('cond-content').innerText = currentCondition.text;
+  var wrap = document.getElementById('cond-reflection-wrap');
+  var ta = document.getElementById('cond-reflection');
+  ta.value = '';
+  wrap.style.display = currentCondition.reflection ? 'block' : 'none';
+  document.getElementById('cond-continue').disabled = !!currentCondition.reflection;
+  logEvent('condition_assigned: '+currentCondition.name);
+}
+function onReflectionInput(){
+  var ta = document.getElementById('cond-reflection');
+  document.getElementById('cond-continue').disabled = ta.value.trim().length < 20;
+}
+
+var likertItems = [
+  'I thought about my usual tendencies when making decisions.',
+  'I considered how my personal strengths and weaknesses might affect my leadership decisions.',
+  'I reflected on how I typically respond when working under time pressure.',
+  'I considered which of my usual coping or decision-making strategies would be helpful in this task.',
+  'I considered the capabilities and limitations of the AI teammates.',
+  'I thought carefully about what the task situation required from the team leader.',
+  'I considered the perspectives and contributions of the other team members.',
+  'I considered multiple possible strategies before deciding how the team should proceed.',
+  'I compared my own decision-making tendencies with the needs of the task.',
+  'I considered whether my personal preferences or biases were affecting how I interpreted the AI teammates\' suggestions.',
+  'I evaluated the AI teammates\' contributions in light of both their capabilities and my own decision-making tendencies.',
+  'I adjusted my leadership approach based on both what I knew about myself and what I observed about the team and task.',
+  'My attention was mainly focused on producing the final entrepreneurship plan rather than reflecting on my decision-making process.',
+  'I relied mainly on my immediate judgment without deliberately examining my own tendencies or the characteristics of the team and task.'
+];
+function renderLikert(){
+  var el = document.getElementById('likert-list');
+  el.innerHTML = likertItems.map(function(text, i){
+    var name = 'lk'+i;
+    var opts = '';
+    for(var v=1; v<=7; v++){
+      opts += '<label><input type="radio" name="'+name+'" value="'+v+'">'+v+'</label>';
+    }
+    return '<div class="likert-item"><div class="likert-text">'+(i+1)+'. '+text+'</div>'+
+      '<div class="likert-scale"><span class="lend">Strongly disagree</span><div class="likert-opts">'+opts+'</div><span class="lend right">Strongly agree</span></div></div>';
+  }).join('');
+}
+function evaluateReflectionScale(){
+  var missing = 0;
+  for(var i=0;i<likertItems.length;i++){ if(!document.querySelector('input[name="lk'+i+'"]:checked')) missing++; }
+  var result = document.getElementById('check3-result');
+  if(missing>0){
+    result.className='result-box warn';
+    result.innerText = missing+' item(s) still need a response.';
+    return;
+  }
+  result.className='result-box ok';
+  result.innerText = 'All items answered — continuing.';
+  logEvent('reflection_scale_completed');
+  setTimeout(function(){ goTo('live'); }, 400);
+}
+
+var liveSeconds = 0; var liveInterval = null;
+function startLiveTimer(){
+  if(liveInterval) return;
+  liveInterval = setInterval(function(){
+    liveSeconds += 1;
+    var m=Math.floor(liveSeconds/60), s=liveSeconds%60;
+    document.getElementById('live-timer').innerText = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }, 1000);
+}
+function toggle(bodyId, arrowId){
+  var body = document.getElementById(bodyId); var arrow = document.getElementById(arrowId);
+  var collapsed = body.classList.toggle('collapsed');
+  arrow.innerText = collapsed ? '▸' : '▾';
+}
+function liveSend(){
+  var input = document.getElementById('live-input'); var v = input.value.trim(); if(!v) return;
+  var box = document.getElementById('live-chat-box');
+  box.innerHTML += bubbleHtml('Y', v, true);
+  input.value = '';
+  logEvent('live_message_sent');
+  setTimeout(function(){
+    var pool = specialists.concat([{name:'Coordinator', initial:'C'}]);
+    var a = pool[Math.floor(Math.random()*pool.length)];
+    box.innerHTML += bubbleHtml(a.initial, '(placeholder reply from '+a.name+' — connects to the real backend in production)');
+    box.scrollTop = box.scrollHeight;
+  }, 600);
+}
+
+renderProgress('consent');
+document.getElementById('screen-consent').classList.add('visible');
+logEvent('enter_screen: consent');
+</script>
+</body>
+</html>

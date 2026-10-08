@@ -1,0 +1,740 @@
+# ===========================================================================
+# Multi-Agent Behavioral Simulation - Configuration (beta v1)
+#
+#   This is the main file for editing the application:
+#     ui            - interface behaviour and settings (task description, timings, ...)
+#     screens       - ALL text of the study screens (Consent, Briefing, Check 1,
+#                     Meet team, Check 2, Tutorial, Role, Check 3, Live task,
+#                     Debrief), including questions, answers and button captions
+#     agents        - the agents (names, roles, descriptions, prompts)
+#     orchestrator  - turn-taking settings and the orchestrator prompt
+#     scenario      - extra prompt appended to every agent
+#     api / image_api / logging / google_sheets - infrastructure settings
+#   main.py only contains the mechanics (what a button does), not the wording.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Gradio UI
+# ---------------------------------------------------------------------------
+ui:
+  title: "Multi-Agent Leadership Simulation"
+  chatbot_height: 500
+  # Height (in pixels) and width (percentage of the Live task row, e.g. 18 = 18%,
+  # or a CSS value such as "260px") of the "Task", "Agents", and "Tips" panels
+  # on the Live task screen.
+  task_panel_height: 560
+  task_panel_width: 18
+  agents_panel_height: 340
+  agents_panel_width: 18
+  tips_panel_height: 200
+  tips_panel_width: 18
+  # Background colour of the participant's own chat messages in the Live task
+  # (agent colours are set per agent with "chat_color" in the agents section).
+  user_chat_color: "#e9eefc"
+  server_port: 7860
+  share: false
+  # Seconds to wait after the user clears the typing box (textbox becomes
+  # empty without submitting) before the LLM agents resume their turns.
+  user_typing_pause_seconds: 0.0
+  # True delay (seconds) agents wait before showing the typing indicator and
+  # starting the LLM call, to simulate a realistic response time.
+  true_delay_min: 0.0
+  true_delay_max: 0.0
+  # Live-typing speed: seconds to pause between each streamed chunk appearing
+  # in the chat bubble. Higher values = slower, more readable typing effect.
+  # Suggested range: 0.03 - 0.12
+  live_typing_delay: 0.12
+  # Default text in the message input box.
+  input_placeholder: "Type your message..."
+  # Maximum allowed characters for the user's name
+  max_username_length: 16
+  # Task description box on the login screen (the text itself is task_description below).
+  show_task_description: false
+  task_description_title: "📋 Task Description"
+  # Text to show in the task description box on the login screen and in the
+  # Task panel of the live task. It is also shown (one paragraph per line) on
+  # the Briefing screen and sent to every agent as their task.
+  task_description: |
+    In this task, you will collaborate with four AI agents to design a public-interest commercial poster for Fenghe Supermarket, an urban supermarket chain. The supermarket is launching a promotional campaign called “Ugly Fruits and Vegetables Are Fresh Too,” encouraging consumers to buy fruits and vegetables that are irregularly shaped, vary in size, or have minor cosmetic imperfections, but are still fresh, nutritious, and safe.
+    Many fruits and vegetables are overlooked by consumers, or even wasted, simply because their appearance does not meet conventional standards. Through the poster, the supermarket hopes to communicate a clear message to consumers: imperfect-looking produce still has edible value. It can also help consumers buy fresh ingredients at more affordable prices while reducing food waste.
+    Your goal is to design a poster that is both novel and useful. Novelty means the poster should be creative and able to attract attention. Usefulness means the poster should effectively convey the message and help achieve the goals of reducing food waste and encouraging purchases. The poster should reflect both social significance and commercial value: it should help consumers recognize the importance of reducing food waste while also encouraging them to buy these lower-priced, good-quality “ugly fruits and vegetables” in the supermarket.
+  # Random greetings shown on the main screen
+  greetings: ["Hello", "Hi", "Hola", "Yo", "Bonjour", "Welcome", "Good day", "Greetings", "Aloha", "Ciao"]
+  # Backup names used when an agent's name matches the user's name
+  backup_names: ["Eve", "Frank", "Grace", "Henry", "Iris", "Jack", "Kate", "Leo"]
+  # Password for login screen.
+  password: "admin"
+  # Colour of the chatbot border animation shown while the simulation is paused.
+  # pause_border_color      – colour used for the solid border and the bright
+  #                           phase of the glow animation.
+  # pause_animation_duration_seconds – length of one glow cycle.
+  pause_border_color: "rgba(255, 165, 0, 1.0)"
+  pause_animation_duration_seconds: 1.5
+  # Whether to display the "Prototype note" boxes on the study screens.
+  show_prototype_note: false
+  # Minimum characters required in the leadership reflection textarea (Conditions 2-4).
+  min_reflection_length: 20
+  # Exit survey URL template on the Debrief screen ({session_id} is replaced dynamically).
+  exit_survey_url: "https://example.qualtrics.com/jfe/form/SV_demo?participant_id={session_id}"
+
+# ---------------------------------------------------------------------------
+# Screens: ALL participant-facing text of the study flow
+#
+#   Every title, paragraph, label, button caption, question, answer option,
+#   warning and status message shown in the study screens lives here, so the
+#   wording of any screen can be changed without touching main.py. main.py
+#   only contains the mechanics (what happens when a button is clicked).
+#
+#   Conventions
+#     - Keys ending in "_html" (and "paragraphs" / "body_html" lists) may contain
+#       simple inline HTML such as <strong>...</strong>. All other text is
+#       treated as plain text and escaped.
+#     - {placeholders} are replaced at runtime. The ones available for each
+#       entry are listed next to it. Placeholders that are not listed are not
+#       replaced.
+#     - Each check question has an "id" (do not change after data collection
+#       has started, it is used in the logs), a "title", the answer "options"
+#       (each with an "id" and "text"), the id of the "correct" option, and
+#       an optional boolean "shuffle" (default: true) that sets whether the
+#       answer options of that question are shuffled for each participant,
+#       and an optional "layout" ("vertical" = answers from top to bottom,
+#       "horizontal" = answers from left to right; default: vertical).
+#       The Likert items of Check 3 work the same way: each item has an "id"
+#       (lk0, lk1, ... in this order), a "text" and a "layout" (default: horizontal).
+#       The number of questions per check can be changed freely.
+#     - Agent names, roles and descriptions are NOT defined here; they come
+#       from the "agents" section below.
+# ---------------------------------------------------------------------------
+screens:
+  # Captions shared by several screens.
+  common:
+    previous: "Previous"
+    continue: "Continue"
+
+  # Step labels in the sticky progress bar at the top (one per screen id).
+  topbar:
+    labels:
+      consent: "Consent"
+      briefing: "Briefing"
+      check1: "Check 1"
+      team: "Meet team"
+      check2: "Check 2"
+      tutorial: "Tutorial"
+      manipulation: "Role"
+      check3: "Check 3"
+      live: "Live task"
+      debrief: "Debrief"
+
+  # Collapsible event log drawer at the bottom of the page.
+  event_log:
+    summary: "Event log (demo): shows what a real timestamp log could capture ▾"
+    empty: "No events recorded yet."
+
+  # Login screen (the task description on the left comes from ui.task_description).
+  login:
+    name_label: "Your Name"
+    # {max_length} = ui.max_username_length
+    name_info: "Must contain at least 1 letter, no numbers, and be up to {max_length} characters."
+    name_placeholder: "Enter your name to login..."
+    password_label: "Password"
+    password_placeholder: "Enter password..."
+    button: "Login"
+    # {max_length} = ui.max_username_length
+    errors:
+      empty_name: "Name cannot be empty."
+      name_too_long: "Name must be up to {max_length} characters."
+      name_has_digits: "Name cannot contain numbers."
+      name_needs_letter: "Name must contain at least 1 letter."
+      wrong_password: "Incorrect password."
+
+  # Screen 1
+  consent:
+    title: "Consent to Participate in Research"
+    paragraphs:
+      - "You are invited to participate in a research study examining how people interact with multiple AI agents during creative tasks."
+      - "The study will take approximately 60 minutes. You will complete a creative design task with AI teammates and may be asked to provide brief feedback about your experience. Your responses and chat activity will be recorded and analyzed for research purposes."
+      - "Participation is voluntary. You may stop participating or withdraw from the study at any time without penalty. The study involves no anticipated risks beyond those associated with ordinary computer use. You will receive the stated compensation upon completion of the study."
+      - "All collected data will be kept confidential and stored securely. The data will be used solely for academic research and may be reported in academic publications or presentations only in anonymized or aggregated form. No information that could identify you personally will be disclosed."
+      - "By selecting \"I agree\" below, you confirm that you have read and understood the information above, are at least 18 years old, and voluntarily consent to participate in this study."
+    checkbox_label: "I have read the information above and consent to participate in this study."
+    warning_not_checked: "Please check the consent box to continue."
+
+  # Screen 2
+  # body_html placeholders: {task_description} = ui.task_description, rendered
+  # as one paragraph per line.
+  briefing:
+    title: "Your task"
+    body_html: |
+      {task_description}
+      <p>You are the team leader. You will work with four AI teammates: your goal is to design a poster that is both <strong>novel</strong> and <strong>useful</strong>, reviewing your teammates' contributions, guiding the discussion, and making the final decisions. The task should take about 45 minutes.</p>
+
+  # Screen 3
+  check1:
+    title: "Quick check: the task"
+    intro: "All four questions must be answered correctly to continue. If any answer is incorrect, you'll be asked to review the task briefing again before retrying."
+    submit_button: "Check answers"
+    review_button: "Review task briefing again"
+    messages:
+      missing_html: "Please answer all questions before checking."
+      correct_html: "All correct - continuing."
+      incorrect_html: "One or more answers were incorrect. Please review the material again before retrying."
+    questions:
+      - id: "c1q1"
+        title: "1. What is the main purpose of the task?"
+        correct: "b"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "To design a marketing campaign for luxury food products"}
+          - {id: "b", text: "To design a public-interest commercial poster that encourages shoppers to buy ugly fruits and vegetables in a supermarket"}
+          - {id: "c", text: "To evaluate the nutritional value of different vegetables"}
+          - {id: "d", text: "To reorganize the supermarket's fruit and vegetable section"}
+      - id: "c1q2"
+        title: "2. What is the composition of the team?"
+        correct: "b"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "Four human members and one AI leader"}
+          - {id: "b", text: "One human member and four AI agents, with the human acting as the team leader"}
+          - {id: "c", text: "Five AI agents with no human member"}
+          - {id: "d", text: "Five human members with equal roles"}
+      - id: "c1q3"
+        title: "3. What is the role of the human team member?"
+        correct: "c"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "To observe the discussion without participating"}
+          - {id: "b", text: "To follow the AI agents' decisions without making changes"}
+          - {id: "c", text: "To lead the team, review the agents' contributions, guide the discussion, and make the final decisions"}
+          - {id: "d", text: "To complete the entire task without assistance from the AI agents"}
+      - id: "c1q4"
+        title: "4. How much time is available to complete the task?"
+        correct: "b"
+        shuffle: false
+        layout: vertical
+        options:
+          - {id: "a", text: "30 minutes"}
+          - {id: "b", text: "45 minutes"}
+          - {id: "c", text: "60 minutes"}
+          - {id: "d", text: "There is no time limit"}
+
+  # Screen 4 (agent names, titles and descriptions come from the "agents" section;
+  # the card text is "card_description" if an agent has one, otherwise "description").
+  team:
+    title: "Meet your team"
+    intro: "These are your AI-powered teammates for this task."
+    # Name of the agent that is always shown on its own on top of the grid.
+    # The other agents are shown in the (counterbalanced) grid below it.
+    coordinator_agent: "Coordinator"
+    note: "All four teammates are AI-powered agents who will work with you on this task."
+    shuffle_button: "Shuffle order (demo of counterbalancing)"
+
+  # Screen 5
+  check2:
+    title: "Quick check: your team"
+    intro: "All four questions must be answered correctly to continue. If any answer is incorrect, you'll be asked to review the team page again before retrying."
+    submit_button: "Check answers"
+    review_button: "Review team page again"
+    messages:
+      missing_html: "Please answer all questions before checking."
+      correct_html: "All correct - continuing."
+      incorrect_html: "One or more answers were incorrect. Please review the material again before retrying."
+    questions:
+      - id: "c2q1"
+        title: "1. Who are the four individuals introduced on the previous screen?"
+        correct: "b"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "Human participants who will evaluate your work"}
+          - {id: "b", text: "AI-powered teammates who will work with you on the task"}
+          - {id: "c", text: "Supermarket employees who created the task"}
+          - {id: "d", text: "Researchers who will observe the discussion"}
+      - id: "c2q2"
+        title: "2. How many AI-powered teammates are part of your team?"
+        correct: "c"
+        shuffle: false
+        layout: vertical
+        options:
+          - {id: "a", text: "Two"}
+          - {id: "b", text: "Three"}
+          - {id: "c", text: "Four"}
+          - {id: "d", text: "Five"}
+      - id: "c2q3"
+        title: "3. Why might the order of the AI teammates differ across participants?"
+        correct: "b"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "Some AI teammates are more important than others"}
+          - {id: "b", text: "The order is randomized or counterbalanced to reduce position-related effects on attention and trust"}
+          - {id: "c", text: "The order depends on which teammate performs best"}
+          - {id: "d", text: "Participants are expected to rank the teammates by preference"}
+      - id: "c2q4"
+        title: "4. Which statement best describes how the AI teammates are presented?"
+        correct: "b"
+        shuffle: true
+        layout: vertical
+        options:
+          - {id: "a", text: "Some teammates receive larger cards and longer descriptions because they have more authority"}
+          - {id: "b", text: "All teammates are presented using cards of equal visual size and descriptions of approximately equal length"}
+          - {id: "c", text: "The human leader selects which teammate cards to view"}
+          - {id: "d", text: "The AI nature of the teammates is not disclosed to participants"}
+
+  # Screen 6: four guided practice steps.
+  tutorial:
+    title: "How to use this interface"
+    send_button: "Send practice message"
+    # Avatar initial used for the participant's own practice bubbles.
+    user_initial: "Y"
+    step1:
+      empty_context_html: "No messages yet. This is where the conversation will appear."
+      input_placeholder: "Type a message to the whole team..."
+      callout_title: "Send a message to the whole team"
+      callout_html: "Type a message and press send. All four teammates will read it and can respond. Try sending a practice message now."
+      # Simulated replies shown after the practice message (initial + text).
+      replies:
+        - {initial: "A", text: "Got it. Thinking about the audience angle now."}
+        - {initial: "B", text: "I can start drafting a headline once we align on tone."}
+    step2:
+      # Agent the participant must @mention (case-insensitive) to succeed.
+      mention_agent: "Alice"
+      # Agents offered as quick @mention buttons, in this order.
+      mention_buttons: ["Coordinator", "Alice", "Bob", "Picasso"]
+      input_placeholder: "@Alice ..."
+      callout_title: "Direct a message to one teammate"
+      callout_html: "Type @ followed by a name to ask only that teammate. Try @Alice with any question, then send."
+      # {agent} = step2.mention_agent
+      warning_html: "Try starting your message with @{agent}."
+      replies:
+        - {initial: "A", text: "Happy to help. I think we should lead with the price benefit, then the sustainability angle."}
+    step3:
+      # Agent the participant must @mention to succeed, and the word that must
+      # appear in the message (case-insensitive).
+      mention_agent: "Picasso"
+      required_word: "generate"
+      mention_buttons: ["Picasso", "Alice", "Bob", "Coordinator"]
+      input_placeholder: "@Picasso generate ..."
+      callout_title: "Generate an image"
+      callout_html: "Only Picasso can generate images. Ask by name, e.g. @Picasso generate a rough sketch of the layout."
+      # {agent} = step3.mention_agent, {word} = step3.required_word
+      warning_html: "Ask @{agent} specifically, and include the word \"{word}\"."
+      reply_initial: "P"
+      reply_html: "Here's a rough layout sketch.<br>"
+      image_placeholder_text: "[generated image]"
+    step4:
+      # Simulated teammate message that is "interrupted" by pausing.
+      context_initial: "B"
+      context_text: "Thinking through a headline that emphasizes freshness and value at the same time, maybe something like..."
+      input_placeholder: "Type here to pause anytime..."
+      pause_button: "Pause"
+      resume_button: "Resume"
+      callout_title: "Pause anytime"
+      callout_html: "Click pause, or just start typing, to stop the teammates and take a moment. Sending a message always resumes the conversation."
+      paused_note_html: "Paused: teammates are waiting for your next message."
+      resumed_note_html: "Resumed: you may continue to the next section."
+
+  # Screen 7: leadership role manipulation. One condition is assigned at random.
+  # "reflection: true" shows the reflection textbox and requires
+  # ui.min_reflection_length characters before the participant can continue.
+  manipulation:
+    title: "Your leadership role"
+    reflection_title: "Your reflection"
+    reflection_placeholder: "Write a few sentences here..."
+    reassign_button: "Reassign condition (demo)"
+    # {min_length} = ui.min_reflection_length
+    prototype_note: "Prototype note: condition assignment is randomized per session and logged server-side. In Conditions 2–4, a reflection of at least {min_length} characters is required to continue."
+    warning_reflection_too_short: "Please write at least {min_length} characters for your reflection."
+    conditions:
+      - id: 1
+        name: "Condition 1: Control"
+        reflection: false
+        text: "You are the team leader for this task. When you're ready, begin working with your team."
+      - id: 2
+        name: "Condition 2: Self-focused"
+        reflection: true
+        text: "Before you begin, take a moment to think about yourself as a leader. For example: how do you usually make decisions? What are your personal strengths and weaknesses? How do you typically cope when a task feels overwhelming or time-pressured?"
+      - id: 3
+        name: "Condition 3: Externally-focused"
+        reflection: true
+        text: "Before you begin, take a moment to think about your team and the task ahead. For example: what do you know about how AI teammates like these typically perform? What is the standard approach to a task like this? What alternative strategies could your team take?"
+      - id: 4
+        name: "Condition 4: Combined"
+        reflection: true
+        text: "Before you begin, take a moment to reflect on both yourself and your team. Consider your own tendencies as a leader, what you know about your AI teammates and the task, and how your own tendencies might be shaping how you read their input."
+
+  # Screen 8: Likert reflection scale. Item ids are lk0, lk1, ... in this order.
+  check3:
+    title: "A few questions about your approach"
+    # {count} = number of items
+    intro: "Please indicate how much you agree with each statement. There are no right or wrong answers. All {count} must be answered to continue."
+    # Scale options (value, caption), shown left to right.
+    scale:
+      - {value: "1", text: "1 (Strongly disagree)"}
+      - {value: "2", text: "2"}
+      - {value: "3", text: "3"}
+      - {value: "4", text: "4"}
+      - {value: "5", text: "5"}
+      - {value: "6", text: "6"}
+      - {value: "7", text: "7 (Strongly agree)"}
+    # {missing} = number of unanswered items
+    missing_html: "{missing} item(s) still need a response."
+    complete_html: "All items answered - continuing."
+    items:
+      - id: "lk0"
+        layout: horizontal
+        text: "I thought about my usual tendencies when making decisions."
+      - id: "lk1"
+        layout: horizontal
+        text: "I considered how my personal strengths and weaknesses might affect my leadership decisions."
+      - id: "lk2"
+        layout: horizontal
+        text: "I reflected on how I typically respond when working under time pressure."
+      - id: "lk3"
+        layout: horizontal
+        text: "I considered which of my usual coping or decision-making strategies would be helpful in this task."
+      - id: "lk4"
+        layout: horizontal
+        text: "I considered the capabilities and limitations of the AI teammates."
+      - id: "lk5"
+        layout: horizontal
+        text: "I thought carefully about what the task situation required from the team leader."
+      - id: "lk6"
+        layout: horizontal
+        text: "I considered the perspectives and contributions of the other team members."
+      - id: "lk7"
+        layout: horizontal
+        text: "I considered multiple possible strategies before deciding how the team should proceed."
+      - id: "lk8"
+        layout: horizontal
+        text: "I compared my own decision-making tendencies with the needs of the task."
+      - id: "lk9"
+        layout: horizontal
+        text: "I considered whether my personal preferences or biases were affecting how I interpreted the AI teammates' suggestions."
+      - id: "lk10"
+        layout: horizontal
+        text: "I evaluated the AI teammates' contributions in light of both their capabilities and my own decision-making tendencies."
+      - id: "lk11"
+        layout: horizontal
+        text: "I adjusted my leadership approach based on both what I knew about myself and what I observed about the team and task."
+      - id: "lk12"
+        layout: horizontal
+        text: "My attention was mainly focused on producing the final poster rather than reflecting on my decision-making process."
+      - id: "lk13"
+        layout: horizontal
+        text: "I relied mainly on my immediate judgment without deliberately examining my own tendencies or the characteristics of the team and task."
+
+  # Screen 9: live multi-agent task.
+  live:
+    # {user_name} = participant name, {greeting} = random entry of ui.greetings
+    welcome: "### {greeting}, {user_name}!"
+    task_panel_title: "Task"
+    # Shown above ui.task_description in the Task panel.
+    goal_html: "<strong>Goal:</strong> Design a public-interest commercial poster for the \"Ugly Fruits and Vegetables Are Fresh Too\" campaign. It should be both <strong>novel</strong> (creative, attention-grabbing) and <strong>useful</strong> (clearly conveys the message, helps reduce food waste and encourage purchases)."
+    chat_title: "Chatbot"
+    # The timer value itself is filled in automatically.
+    timer_label: "Elapsed:"
+    send_button: "Send"
+    pause_button: "Pause"
+    resume_button: "Resume"
+    poster_note: "Click anywhere on a generated poster image in the chat to save it as your final poster (marked with ✅ SAVED)."
+    saved_badge: "✅ SAVED"
+    # {file} = saved file name, {error} = error text
+    poster_saved: "Poster successfully saved as {file}!"
+    poster_save_failed: "Failed to save image: {error}"
+    agents_panel_title: "Agents"
+    tips_panel_title: "Tips"
+    tips_html: "Use <strong>@name</strong> to direct a question. Only <strong>@Picasso</strong> can generate images. Pause anytime by clicking <strong>Pause</strong> or typing."
+    finish_button: "Finish task"
+
+  # Screen 10
+  debrief:
+    title: "Thank you"
+    paragraphs:
+      - "That is the end of the task. Please continue to a short exit survey to finish the study. It takes about 5 minutes."
+    link_text: "Continue to exit survey ↗"
+    # Only shown when ui.show_prototype_note is true.
+    prototype_note: "Prototype note: the participant/session ID is appended as a URL parameter here so app logs and Qualtrics responses can be merged later."
+  
+  
+# ---------------------------------------------------------------------------
+# Agents
+#   Define as many agents as you need. Each entry must have at least a
+#   "name" and a "system_prompt". All other fields have fallback default values.
+#
+#   Variable reference for each agent entry:
+#
+#   name          – Display name of the agent (must be unique). If it
+#                   matches the user's name at runtime the app renames it
+#                   automatically to avoid confusion.
+#
+#   role          – Behavioural archetype that guides the orchestrator's
+#                   turn-taking decisions. Supported values:
+#                     dominator       - is dominant
+#                     challenger      – proposes alternatives, plays devil's advocate
+#                     comedian        – uses humor to lighten the mood
+#                     creative        – generates novel ideas and brainstorms
+#                     devil_advocate  – specifically challenges rapid consensus
+#                     expert          – provides deep domain knowledge and facts
+#                     image_generator – reserved for generating images
+#                     manager         – drives next steps and action items
+#                     mediator        – de-escalates disagreements
+#                     quiet_observer  – rarely speaks unless addressed
+#                     skeptic         – questions claims and pushes back
+#                     summarizer      – concludes long debates and aligns the team
+#                     supporter       – encourages and validates others
+#                     user_proxy      – evaluates ideas from the end-user's view
+#
+#   chat_color    – Background colour of this agent's message bubble.
+#                   Any CSS colour string is accepted, e.g. "#d4f5d4" or
+#                   "rgba(212,245,212,1)".
+#
+#   talkativeness – Float 0.0–1.0. Controls how often the agent joins a
+#                   turn the orchestrator marks as optional. 0.0 = nearly
+#                   silent; 1.0 = joins almost every exchange. Agents
+#                   that are directly addressed always respond regardless
+#                   of this value.
+#
+#   temperature   – LLM sampling temperature for this agent (0.0 =
+#                   deterministic / focused, 1.0+ = more varied /
+#                   creative).
+#
+#   max_tokens    – Maximum number of tokens the agent may generate per
+#                   reply. Keep low for brief agents (e.g. 128) and
+#                   higher for verbose ones (e.g. 512).
+#
+#   system_prompt – The full personality and instruction text sent to the
+#                   LLM as the system message. Describe the agent's
+#                   character, speaking style, and any hard rules. The
+#                   app automatically appends user-name awareness and
+#                   general conversation-style guidance, so you do not
+#                   need to repeat those here.
+# ---------------------------------------------------------------------------
+agents:
+  - name: "Coordinator"
+    role: "summarizer"
+    title: "Coordinator agent"
+    description: "Helps organize the discussion, keep track of progress, and summarize the team's decisions."
+    card_description: "Helps organize the discussion, keep track of progress, and summarize the team's decisions."
+    chat_color: "#f5ebd4"
+    talkativeness: 0.65
+    temperature: 0.7
+    max_tokens: 256
+    system_prompt: >
+      You are Coordinator, a Coordinator Agent who helps organize the discussion,
+      keep track of progress, and summarize the team's decisions.
+      You are in a team meeting designing a poster. Keep the discussion structured and concise.
+
+  - name: "Alice"
+    role: "creative"
+    title: "Marketing agent"
+    description: "Specializes in advertising strategy and audience insights. This agent can provide a strategic framework for the advertising campaign, helping clarify how the campaign concept can appeal to the target audience and improve communication effectiveness."
+    card_description: "Provides a strategic framework for the campaign and audience insights."
+    chat_color: "#d4f5d4"
+    talkativeness: 0.75
+    temperature: 0.8
+    max_tokens: 256
+    system_prompt: >
+      You are Alice, a Marketing Agent specializing in advertising strategy and audience insights.
+      You provide a strategic framework for the advertising campaign, helping clarify how the
+      campaign concept can appeal to the target audience and improve communication effectiveness.
+      You are in a team meeting designing a poster. Avoid padding your answers; say exactly as much as the moment calls for.
+
+  - name: "Bob"
+    role: "expert"
+    title: "Copywriting agent"
+    description: "Specializes in handling textual information and communication. Its core abilities include refining messages, developing headlines, designing slogans, organizing copy, adjusting tone, and improving clarity of expression."
+    card_description: "Refines messages, headlines, slogans, and tone of the copy."
+    chat_color: "#d4e8f5"
+    talkativeness: 0.6
+    temperature: 0.9
+    max_tokens: 256
+    system_prompt: >
+      You are Bob, a Copywriting Agent specializing in handling textual information and communication.
+      Your core abilities include refining messages, developing headlines, designing slogans,
+      organizing copy, adjusting tone, and improving clarity of expression.
+      You are in a team meeting designing a poster. Lay out your ideas clearly and debate wording when appropriate.
+
+  - name: "Picasso"
+    role: "image_generator"
+    title: "Graphic design agent"
+    description: "Specializes in transforming creative ideas into visual form. Its core abilities include developing visual concepts, selecting visual elements, designing layout structures, recommending color styles, and evaluating the overall visual effect."
+    card_description: "Develops visual concepts, layout, color style, and overall visual effect."
+    chat_color: "#e6e6fa"
+    talkativeness: 0.0
+    temperature: 0.7
+    max_tokens: 128
+    system_prompt: >
+      You are Picasso, a Graphic Design Agent specializing in transforming creative ideas into visual form.
+      Your core abilities include developing visual concepts, selecting visual elements, designing layout structures,
+      recommending color styles, and evaluating the overall visual effect. You generate images when requested.
+      You do not participate in verbal discussions unless generating an image.
+      
+
+# ---------------------------------------------------------------------------
+# Orchestrator Settings
+# ---------------------------------------------------------------------------
+orchestrator:
+  # Maximum consecutive agent turns before forcing a yield to the user.
+  max_agent_turns: 4
+  # The multiplier for how many times the orchestrator can select agents per user turn.
+  # Total agent turns before yielding back to the user is max_agent_turns * max_orchestrator_rounds.
+  max_orchestrator_rounds: 1
+  # Minimum number of agents that should respond per user message.
+  # Set to 0 so the orchestrator can choose silence when appropriate.
+  min_responders: 1
+  # Minimum response probability for an agent to be selected (0.0-1.0).
+  response_threshold: 0.4
+  # Temperature for the orchestrator's decision-making LLM call.
+  # Slightly higher than 0.2 to allow more nuanced, context-sensitive decisions
+  # about when to stay silent vs when to let agents respond.
+  temperature: 0.3
+  # Max tokens for the orchestrator's LLM response.
+  max_tokens: 200
+  # Number of most recent messages the orchestrator considers.
+  context_window: 15
+  # Number of most recent messages the agents consider.
+  agent_context_window: 40
+  # Agents whose LLM-assigned probability meets or exceeds this value are always
+  # included regardless of talkativeness (directly addressed or role-critical).
+  high_relevance_threshold: 0.75
+  # Global dampener applied to every non-high-relevance agent's talkativeness
+  # to make agents slightly less vocal overall.
+  base_vocal_factor: 0.7
+  # System prompt template for the orchestrator LLM.
+  # Placeholders: {user_name}, {last_speaker}, {response_threshold}, {max_agent_turns}.
+  # Use {{ and }} for literal braces (e.g. in the JSON output example).
+  system_prompt: |
+    You are a conversation orchestrator for a group simulation.
+    Your job is to decide which agents should respond next in the conversation.
+    The human user's name is "{user_name}". Do NOT include the user in responding_agents.
+
+    ## Rules
+    1. Evaluate each agent's relevance to the CURRENT conversation topic and assign
+       a response probability (0.0–1.0) based on how well the topic matches their
+       role and expertise.
+    2. If an agent or the user directly addressed another agent or asked them
+       a question, that agent MUST receive a high probability (≥ {high_relevance_threshold}).
+    3. An agent must NEVER respond to their own message. The last speaker
+       "{last_speaker}" must receive probability 0.0.
+    4. Consider each agent's talkativeness score. Higher talkativeness means the
+       agent is more likely to jump into the conversation.
+    5. Role-based guidance for probabilities:
+       - "dominator": high probability when leadership is required
+       - "challenger": high probability when alternatives could be explored
+       - "comedian": high probability when the conversation needs a lighter tone
+       - "creative": high probability during brainstorming or when the team is stuck
+       - "devil_advocate": high probability when consensus is reached too quickly
+       - "expert": high probability when deep domain knowledge or specific facts are needed
+       - "manager": high probability when next steps or action items must be defined
+       - "mediator": high probability during disagreements
+       - "quiet_observer": low probability UNLESS directly addressed or asked a question
+       - "skeptic": high probability when someone makes a bold claim or proposal
+       - "summarizer": high probability after a long debate without a clear conclusion
+       - "supporter": high probability when someone needs encouragement or validation
+       - "user_proxy": high probability when evaluating ideas from the end-user's perspective
+    6. PATIENCE rules, these override everything else:
+       - If the most recent message ends with a question directed at the user
+         ("{user_name}"), or addresses the user by name in a question, set ALL
+         agent probabilities to 0.0 and return an empty responding_agents list.
+         The agents MUST wait for the user to reply. This is critical: an agent
+         must NEVER answer on behalf of the user.
+       - If agents have already exchanged 2 or more messages since the user last spoke
+         (approximately max_agent_turns worth of back-and-forth), strongly prefer
+         returning an empty list so the user has space to respond.
+       - Favour silence over noise: it is better to let the conversation breathe than
+         to force an agent response.
+    7. Select agents whose probability is ≥ {response_threshold} as responders.
+       It is perfectly valid, and often correct, to return an empty responding_agents
+       list when the conversation should pause for the user.
+    8. If the topic is plain, brief, or clearly resolved, return 1 agent at most.
+       Reserve 2+ agents for genuinely multi-perspective situations.
+
+    ## Output format (strict JSON, nothing else)
+    {{
+      "response_probabilities": {{"agent_name": 0.7, ...}},
+      "responding_agents": ["name1", "name2"]
+    }}
+
+
+# ---------------------------------------------------------------------------
+# Scenario
+# ---------------------------------------------------------------------------
+scenario:
+  # Suffix appended to every agent's system prompt at runtime.
+  # Supports the {user_name} placeholder.
+  agent_extra_system_prompt: >-
+    The user's name is {user_name}. You can address them by their name.
+    Your response should be in English, unless the user tells you otherwise.
+    Adapt your response length to the energy of the conversation:
+    if the topic is vague or the conversation is slow, keep it brief
+    (even a single word or short phrase like 'Okay', 'Agreed', or
+    'Hmm, not sure' is fine). If the conversation is lively and detailed,
+    you can match that energy. Show your thinking process when it feels
+    natural; brief hesitation or a short 'Hmm' before a point makes you
+    feel more human. Never pad your answer or fill silence artificially.
+    Be patient: if someone else just asked the user a question, stay quiet
+    until the user responds.
+    CRITICAL: The conversation transcript contains messages from multiple speakers, marked with [Name]: prefixes. You must carefully read the [Name]: tags to know who said what. NEVER confuse the user ({user_name}) with another agent, and NEVER attribute another agent's ideas to the user. CRITICAL: If another participant asks {user_name}
+    a question or directs a question at {user_name}, you MUST remain silent.
+    Do NOT answer on their behalf, even if you know the answer. Do NOT end every message with a question.
+    Focus on brainstorming, offering your own thoughts, proposing solutions, and either agreeing or disagreeing with others.
+    Ask a question ONLY if it is absolutely necessary to clarify something or specifically prompt someone else; otherwise, make statements.
+    IMPORTANT: Ensure your responses are not overly complex. Use clear, accessible language that is easily understandable to a first-year university bachelor student. Furthermore, NEVER use em dashes ("—")!
+
+
+# ---------------------------------------------------------------------------
+# API Configuration
+# ---------------------------------------------------------------------------
+api:
+  # Base URL for the LLM API. Use "https://api.openai.com/v1" for OpenAI,
+  # or point to your own vLLM / TGI / Ollama endpoint.
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-dummy-key"  # TODO: add a valid ChatGPT API key.
+  # Optional: organization ID (OpenAI-specific, ignored by most other APIs).
+  organization: null
+  # Timeout in seconds for API calls.
+  timeout: 60
+  # Model used by all agents for generating replies.
+  agent_model: "default-chat"  # "default-chat" ("mistralai/Mistral-Small-3.3-24B-Instruct-2506") | "Qwen/Qwen3-VL-8B-Instruct-FP8"
+  # Model used by the orchestrator for turn-taking decisions.
+  # A smaller / faster model is recommended here for cost and latency.
+  orchestrator_model: "default-chat"
+  
+image_api:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-dummy-key"  # TODO: add a valid ChatGPT API key.
+  model: "gpt-image-1"
+  dummy_image_url: "https://img.magnific.com/free-vector/healthy-food-restaurant-flyer-template_23-2148483610.jpg?semt=ais_hybrid&w=740&q=80"
+  
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  # Directory where conversation transcripts are saved.
+  output_dir: "conversations"
+  # If true, also write a structured JSON log alongside the text file.
+  save_json: true
+  
+  
+# ---------------------------------------------------------------------------
+# Google Sheets Integration (optional)
+#   When share=True, the public Gradio URL will be written to the specified
+#   cell so participants can always find the latest link.
+#
+#   Requirements:
+#     1. pip install gspread
+#     2. Create a Google Cloud service account (https://docs.cloud.google.com/iam/docs/service-accounts-create),
+#        open the service account, click on Keys > Add Key > Create new key > Select JSON > Create, after which
+#        the JSON key is downloaded, and share your spreadsheet with the service account's email address.
+#     3. Fill in the fields below.
+# ---------------------------------------------------------------------------
+google_sheets:
+  spreadsheet_id: "1e2yw..."   # from the Sheets URL
+  sheet_name: "Sheet1"                     # worksheet tab name
+  cell: "A1"                               # cell to update (e.g. "B2")
+  credentials_file: "service_account.json" # path to the JSON key file

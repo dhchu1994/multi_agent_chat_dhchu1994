@@ -1,0 +1,4 @@
+gradio
+openai
+pyyaml
+gspread  # optional: required only for Google Sheets link auto-update

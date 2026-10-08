@@ -1,0 +1,1 @@
+Hello, welcome everyone. Good to see you. So, this is our first day together building the application. I have a full pipeline in mind. The first step is to collect weather data of the Netherlands. Anyone has an idea what type of data may be useful for the weather prediction task, and if so, how can we scrape this data? 
