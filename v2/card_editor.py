@@ -18,7 +18,7 @@ from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 from enum import Enum
 
-from v2.config_loader_v2 import get_config, ConditionConfig
+from config_loader_v2 import get_config, ConditionConfig
 
 
 class CardActionType(Enum):

@@ -20,12 +20,12 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 
-from v2.config_loader_v2 import get_config, ConditionConfig
-from v2.agents_v2 import (
+from config_loader_v2 import get_config, ConditionConfig
+from agents_v2 import (
     AgentFactory, OrchestratorAgent, SpecialistAgent,
     Message, FoldedBlock, PanelGenerator, get_panel_generator
 )
-from v2.card_editor import Card, CardEditor
+from card_editor import Card, CardEditor
 
 
 @dataclass

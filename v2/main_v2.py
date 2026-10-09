@@ -29,12 +29,12 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 
-from v2.config_loader_v2 import get_config, reset_config_loader
-from v2.simulation_v2 import (
+from config_loader_v2 import get_config, reset_config_loader
+from simulation_v2 import (
     SimulationV2, get_simulation, cleanup_simulation,
     Session, SessionState, PageType
 )
-from v2.conversation_logger_v2 import get_logger, reset_logger
+from conversation_logger_v2 import get_logger, reset_logger
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

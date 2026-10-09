@@ -30,13 +30,13 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 import logging
 
-from v2.config_loader_v2 import get_config, ConditionConfig, ClientConfig
-from v2.agents_v2 import (
+from config_loader_v2 import get_config, ConditionConfig, ClientConfig
+from agents_v2 import (
     AgentFactory, SpecialistAgent, OrchestratorAgent, 
     Message, FoldedBlock, PanelGenerator, get_panel_generator
 )
-from v2.card_editor import Card, CardEditor, CardActionType
-from v2.conversation_logger_v2 import (
+from card_editor import Card, CardEditor, CardActionType
+from conversation_logger_v2 import (
     get_logger, reset_logger, ConversationLoggerV2,
     Event, SessionStartEvent, SessionEndEvent
 )

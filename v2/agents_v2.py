@@ -22,7 +22,7 @@ from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 import uuid
 
-from v2.config_loader_v2 import get_config, ConditionConfig
+from config_loader_v2 import get_config, ConditionConfig
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

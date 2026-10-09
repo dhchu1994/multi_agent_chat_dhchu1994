@@ -585,6 +585,12 @@ def get_config(config_path: str = "v2/config_v2.yaml") -> FullConfig:
     return loader.config
 
 
+def reset_config_loader():
+    """Reset the global config loader instance"""
+    global _config_loader
+    _config_loader = None
+
+
 if __name__ == "__main__":
     # Test loading
     loader = ConfigLoaderV2()
