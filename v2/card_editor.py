@@ -293,14 +293,8 @@ class CardField:
         return field
 
 
-@dataclass
 class Card:
     """Complete card with 5 fields and provenance tracking"""
-    fields: Dict[str, CardField] = field(default_factory=dict)
-    typed_share: str = ""
-    typed_share_author: str = ""
-    is_submitted: bool = False
-    submission_timestamp: Optional[str] = None
     
     def __init__(self, field_configs: Optional[List[Dict]] = None):
         if field_configs:

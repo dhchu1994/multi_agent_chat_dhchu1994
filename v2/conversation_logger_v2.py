@@ -67,16 +67,8 @@ class Event:
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-@dataclass
 class SessionStartEvent(Event):
     """Session start event"""
-    condition_code: str
-    config_version: str
-    model_version: str
-    user_agent: str
-    viewport: Dict[str, Any]
-    client_order: List[str]
-    card_order: List[str]
     
     def __init__(self, pid: str, condition_code: str, config_version: str, 
                  model_version: str, user_agent: str, viewport: Dict[str, Any],
@@ -110,12 +102,8 @@ class SessionStartEvent(Event):
         return base
 
 
-@dataclass
 class SessionEndEvent(Event):
     """Session end event"""
-    end_state: str
-    completion_code: str
-    duration_seconds: float
     
     def __init__(self, pid: str, end_state: str, completion_code: str, 
                  duration_seconds: float, client: str = None, page: str = None):
@@ -140,10 +128,8 @@ class SessionEndEvent(Event):
         return base
 
 
-@dataclass
 class PageEvent(Event):
     """Page enter/leave event"""
-    page_id: str
     
     def __init__(self, event_type: str, pid: str, page_id: str, 
                  client: str = None, page: str = None):
@@ -162,7 +148,6 @@ class PageEvent(Event):
         return base
 
 
-@dataclass
 class WindowEvent(Event):
     """Window blur/focus event"""
     def __init__(self, event_type: str, pid: str, client: str = None, page: str = None):
@@ -175,12 +160,8 @@ class WindowEvent(Event):
         )
 
 
-@dataclass
 class PracticeStepEvent(Event):
     """Practice step completed"""
-    step_id: str
-    attempts: int
-    seconds: float
     
     def __init__(self, pid: str, step_id: str, attempts: int, seconds: float,
                  client: str = None, page: str = None):
@@ -205,12 +186,8 @@ class PracticeStepEvent(Event):
         return base
 
 
-@dataclass
 class RoleCheckEvent(Event):
     """Role check event (practice exercise 4)"""
-    answer: str
-    correct: bool
-    sent_back: bool
     
     def __init__(self, pid: str, answer: str, correct: bool, sent_back: bool,
                  client: str = None, page: str = None):
@@ -235,13 +212,8 @@ class RoleCheckEvent(Event):
         return base
 
 
-@dataclass
 class MessageSentEvent(Event):
     """Participant sends a message"""
-    text: str
-    addressees: List[str]
-    at_mention_used: bool
-    character_count: int
     
     def __init__(self, pid: str, text: str, addressees: List[str], 
                  at_mention_used: bool, client: str = None, page: str = None):
@@ -268,20 +240,8 @@ class MessageSentEvent(Event):
         return base
 
 
-@dataclass
 class AgentReplyEvent(Event):
     """Specialist reply event"""
-    agent: str
-    in_reply_to: str
-    text: str
-    first_token_latency_ms: int
-    total_latency_ms: int
-    tokens_in: int
-    tokens_out: int
-    hidden_item_ids_disclosed: List[str]
-    asked_for: bool
-    declined: bool
-    redirected_to: Optional[str]
     
     def __init__(self, pid: str, agent: str, in_reply_to: str, text: str,
                  first_token_latency_ms: int, total_latency_ms: int,
@@ -326,12 +286,8 @@ class AgentReplyEvent(Event):
         return base
 
 
-@dataclass
 class OrchMessageEvent(Event):
     """Orchestrator to specialist message"""
-    to: str
-    text: str
-    block_id: str
     
     def __init__(self, pid: str, to: str, text: str, block_id: str,
                  client: str = None, page: str = None):
@@ -356,10 +312,8 @@ class OrchMessageEvent(Event):
         return base
 
 
-@dataclass
 class FoldEvent(Event):
     """Fold open/close event"""
-    block_id: str
     
     def __init__(self, event_type: str, pid: str, block_id: str,
                  client: str = None, page: str = None):
@@ -378,13 +332,8 @@ class FoldEvent(Event):
         return base
 
 
-@dataclass
 class PanelShownEvent(Event):
     """Panel text appears or changes"""
-    level: str
-    text: str
-    word_count: int
-    sections_present: List[str]
     
     def __init__(self, pid: str, level: str, text: str, word_count: int,
                  sections_present: List[str], client: str = None, page: str = None):
@@ -411,16 +360,8 @@ class PanelShownEvent(Event):
         return base
 
 
-@dataclass
 class CardActionEvent(Event):
     """Card action event"""
-    field: str
-    span_id: str
-    action: str  # keep, cut, send_back, type, delete
-    reason: Optional[str] = None
-    characters_added: Optional[int] = None
-    characters_removed: Optional[int] = None
-    author: Optional[str] = None
     
     def __init__(self, pid: str, field: str, span_id: str, action: str,
                  reason: Optional[str] = None, characters_added: Optional[int] = None,
@@ -455,12 +396,8 @@ class CardActionEvent(Event):
         return base
 
 
-@dataclass
 class CardSubmitEvent(Event):
     """Card submission event"""
-    full_card: Dict
-    typed_share: str
-    fields_complete: bool
     
     def __init__(self, pid: str, full_card: Dict, typed_share: str, 
                  fields_complete: bool, client: str = None, page: str = None):
@@ -485,12 +422,8 @@ class CardSubmitEvent(Event):
         return base
 
 
-@dataclass
 class CheckinAnswerEvent(Event):
     """Check-in answer event"""
-    item_id: str
-    value: str
-    milliseconds_to_answer: float
     
     def __init__(self, pid: str, item_id: str, value: str, 
                  milliseconds_to_answer: float, client: str = None, page: str = None):
@@ -515,10 +448,8 @@ class CheckinAnswerEvent(Event):
         return base
 
 
-@dataclass
 class PackEvent(Event):
     """Reference pack open/close event (NOAI condition)"""
-    section: str
     
     def __init__(self, event_type: str, pid: str, section: str,
                  client: str = None, page: str = None):
@@ -537,7 +468,6 @@ class PackEvent(Event):
         return base
 
 
-@dataclass
 class TimerExpiredEvent(Event):
     """Timer expired event"""
     def __init__(self, pid: str, client: str = None, page: str = None):
@@ -550,10 +480,8 @@ class TimerExpiredEvent(Event):
         )
 
 
-@dataclass
 class BreakEvent(Event):
     """Break start/end event"""
-    ended_early: bool
     
     def __init__(self, event_type: str, pid: str, ended_early: bool,
                  client: str = None, page: str = None):
@@ -572,12 +500,8 @@ class BreakEvent(Event):
         return base
 
 
-@dataclass
 class AgentErrorEvent(Event):
     """Agent error event"""
-    agent: str
-    error_type: str
-    retry_number: int
     
     def __init__(self, pid: str, agent: str, error_type: str, 
                  retry_number: int, client: str = None, page: str = None):
@@ -602,10 +526,8 @@ class AgentErrorEvent(Event):
         return base
 
 
-@dataclass
 class ScrollSampleEvent(Event):
     """Scroll position sample event"""
-    scroll_position: float
     
     def __init__(self, pid: str, scroll_position: float,
                  client: str = None, page: str = None):

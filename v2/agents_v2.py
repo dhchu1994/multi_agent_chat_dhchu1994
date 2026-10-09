@@ -85,12 +85,8 @@ class CardField:
         self.author = author
 
 
-@dataclass
 class Card:
     """The card with 5 fields and provenance tracking"""
-    fields: Dict[str, CardField] = field(default_factory=dict)
-    typed_share: str = ""  # For generative role
-    fields_complete: bool = False
     
     def __init__(self, field_ids: List[str]):
         self.fields = {fid: CardField(field_id=fid, content="", author="") for fid in field_ids}

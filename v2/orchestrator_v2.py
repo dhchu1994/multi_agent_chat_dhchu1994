@@ -28,12 +28,8 @@ from agents_v2 import (
 from card_editor import Card, CardEditor
 
 
-@dataclass
 class RoutingResult:
     """Result of routing a message"""
-    recipients: List[str]  # Agent names that should receive this message
-    is_orchestrator_message: bool = False
-    should_create_folded_block: bool = False
     
     def __init__(self, recipients: List[str], is_orchestrator_message: bool = False,
                  should_create_folded_block: bool = False):
