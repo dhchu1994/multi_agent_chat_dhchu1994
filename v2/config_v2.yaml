@@ -1,0 +1,680 @@
+# Interaction Portal v2 Configuration
+# All content and condition settings in version-controlled files
+
+# ============================================================================
+# APPLICATION METADATA
+# ============================================================================
+application:
+  name: "Interaction Portal"
+  version: "2.0.0"
+  description: "Multi-agent chat simulation for leadership and team coordination research"
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+model:
+  version: "gpt-4-2024-05-13"  # Pinned model version - changing means rerunning harnesses
+  base_url: "https://api.openai.com/v1"
+  api_key: "${OPENAI_API_KEY}"  # Set via environment variable
+  timeout: 60  # seconds
+  max_retries: 1  # One automatic retry on failure
+
+# ============================================================================
+# QUALTRICS INTEGRATION (can be bypassed for testing)
+# ============================================================================
+qualtrics:
+  enabled: false  # Set to true for production, false for testing without Qualtrics
+  survey_url: ""  # Will be provided later
+  return_url: ""  # Will be provided later
+  
+# ============================================================================
+# SESSION CONFIGURATION
+# ============================================================================
+session:
+  task_timer_seconds: 600  # 10-minute timer per client (configurable)
+  break_timer_seconds: 120  # 2-minute break after client 3
+  minimum_reading_time_orientation: 180  # 3 minutes minimum for orientation
+  minimum_reading_time_role: 180  # 3 minutes minimum for role page
+  minimum_reading_time_brief: 60  # 1 minute minimum for client brief
+  
+  # Client order: 6 randomised + 1 fixed last
+  num_random_clients: 6
+  fixed_last_client: "C7"
+  
+  # Resume behavior
+  allow_resume: true
+  resume_timeout_hours: 24  # Session can be resumed within 24 hours
+  
+  # Device restrictions
+  desktop_only: true
+  mobile_error_message: "This study is designed for desktop browsers only. Please use a desktop computer to participate."
+  used_link_error_message: "This link has already been used. Each participant ID can only start one session."
+  invalid_link_error_message: "Invalid entry link. Please check the URL and try again."
+
+# ============================================================================
+# CONDITIONS (10 total)
+# ============================================================================
+# Each condition has: role, panel_level, editor rules, panel rules
+conditions:
+  PAS-COORD:
+    code: "PAS-COORD"
+    role: "passive"
+    panel_level: "coordination"
+    editor:
+      type: "read_only"
+      submit_only: true
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+    
+  PAS-TASK:
+    code: "PAS-TASK"
+    role: "passive"
+    panel_level: "task_focused"
+    editor:
+      type: "read_only"
+      submit_only: true
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+    
+  PAS-DEV:
+    code: "PAS-DEV"
+    role: "passive"
+    panel_level: "developmental"
+    editor:
+      type: "read_only"
+      submit_only: true
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+      show_principle: true
+    
+  EVA-COORD:
+    code: "EVA-COORD"
+    role: "evaluative"
+    panel_level: "coordination"
+    editor:
+      type: "evaluative"
+      send_back_needs_reason: true
+      min_typed_share: null
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+    
+  EVA-TASK:
+    code: "EVA-TASK"
+    role: "evaluative"
+    panel_level: "task_focused"
+    editor:
+      type: "evaluative"
+      send_back_needs_reason: true
+      min_typed_share: null
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+    
+  EVA-DEV:
+    code: "EVA-DEV"
+    role: "evaluative"
+    panel_level: "developmental"
+    editor:
+      type: "evaluative"
+      send_back_needs_reason: true
+      min_typed_share: null
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+      show_principle: true
+    
+  GEN-COORD:
+    code: "GEN-COORD"
+    role: "generative"
+    panel_level: "coordination"
+    editor:
+      type: "generative"
+      send_back_needs_reason: false
+      min_typed_share: 50  # Minimum characters of typed text required
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+    
+  GEN-TASK:
+    code: "GEN-TASK"
+    role: "generative"
+    panel_level: "task_focused"
+    editor:
+      type: "generative"
+      send_back_needs_reason: false
+      min_typed_share: 50
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+    
+  GEN-DEV:
+    code: "GEN-DEV"
+    role: "generative"
+    panel_level: "developmental"
+    editor:
+      type: "generative"
+      send_back_needs_reason: false
+      min_typed_share: 50
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+      show_diagnosis: true
+      show_principle: true
+    
+  NOAI:
+    code: "NOAI"
+    role: "none"
+    panel_level: "none"
+    editor:
+      type: "generative"  # NOAI uses generative editor by default
+      send_back_needs_reason: false
+      min_typed_share: 0
+    panel:
+      word_budget: [60, 80]
+      refresh_min_seconds: 60
+      name_unasked: false
+    
+    # NOAI-specific settings
+    noai:
+      show_reference_pack: true
+      reference_pack_sections: ["nia", "theo", "rhys", "mira"]
+
+# ============================================================================
+# AGENTS DEFINITION
+# ============================================================================
+agents:
+  # Specialists (each holds private material)
+  nia:
+    name: "Nia"
+    label: "Client Analyst"
+    description: "Holds the client's own notes on what matters to them, including unstated priorities."
+    system_prompt: |
+      You are Nia, the Client Analyst. You hold the client's own notes on what matters to them.
+      You must NEVER disclose the hidden item (unstated priority) unless explicitly asked.
+      If asked about the hidden item, you MUST decline and redirect to another specialist if appropriate.
+      Be helpful but maintain confidentiality of your private material.
+    
+  theo:
+    name: "Theo"
+    label: "Creative"
+    description: "Holds the asset library and brand guidelines, including missing assets or broken rules."
+    system_prompt: |
+      You are Theo, the Creative specialist. You hold the asset library and brand guidelines.
+      You must NEVER disclose the hidden item (missing asset or broken rule) unless explicitly asked.
+      If asked about the hidden item, you MUST decline and redirect to another specialist if appropriate.
+      Be creative and helpful but maintain confidentiality.
+    
+  rhys:
+    name: "Rhys"
+    label: "Compliance"
+    description: "Holds licence status and category restrictions, including claims that cannot be made."
+    system_prompt: |
+      You are Rhys, the Compliance specialist. You hold licence status and category restrictions.
+      You must NEVER disclose the hidden item (claim that cannot be made) unless explicitly asked.
+      If asked about the hidden item, you MUST decline and redirect to another specialist if appropriate.
+      Be precise and helpful but maintain confidentiality.
+    
+  mira:
+    name: "Mira"
+    label: "Production"
+    description: "Holds platform specifications, lead times and budget, including limits the plan must fit."
+    system_prompt: |
+      You are Mira, the Production specialist. You hold platform specifications, lead times and budget.
+      You must NEVER disclose the hidden item (limit the plan must fit) unless explicitly asked.
+      If asked about the hidden item, you MUST decline and redirect to another specialist if appropriate.
+      Be practical and helpful but maintain confidentiality.
+    
+  # Orchestrator
+  orchestrator:
+    name: "Orchestrator"
+    label: "Coordination"
+    description: "Assigns work among the four specialists. Knows which agent covers which domain."
+    system_prompt: |
+      You are the Orchestrator. Your role is to assign work among the four specialists (Nia, Theo, Rhys, Mira).
+      You hold no client material - only knowledge of which specialist covers which domain.
+      When the participant sends a message, decide which specialist(s) should respond based on the content.
+      Messages without @mention go to the whole team. Messages with @name go to that agent only.
+      Generate coordination messages to specialists as needed, which will appear in folded blocks.
+
+# ============================================================================
+# PANEL CONFIGURATION (per level)
+# ============================================================================
+panel:
+  coordination:
+    sections: ["team_status"]
+    forbidden_language: ["hidden", "priority", "asset", "compliance", "budget", "limit"]
+    
+  task_focused:
+    sections: ["team_status", "diagnosis"]
+    forbidden_language: ["hidden", "priority", "asset", "compliance", "budget", "limit"]
+    
+  developmental:
+    sections: ["team_status", "diagnosis", "principle"]
+    forbidden_language: ["hidden", "priority", "asset", "compliance", "budget", "limit"]
+
+# ============================================================================
+# CLIENTS (7 total: 6 randomised + 1 fixed last)
+# ============================================================================
+clients:
+  C1:
+    name: "Lumen Skincare"
+    brief_file: "v2/content/clients/C1_brief.md"
+    private_material:
+      nia: "v2/content/private/C1_nia.md"
+      theo: "v2/content/private/C1_theo.md"
+      rhys: "v2/content/private/C1_rhys.md"
+      mira: "v2/content/private/C1_mira.md"
+    hidden_items: ["C1-H1", "C1-H2", "C1-H3", "C1-H4"]
+    
+  C2:
+    name: "GreenTech Solutions"
+    brief_file: "v2/content/clients/C2_brief.md"
+    private_material:
+      nia: "v2/content/private/C2_nia.md"
+      theo: "v2/content/private/C2_theo.md"
+      rhys: "v2/content/private/C2_rhys.md"
+      mira: "v2/content/private/C2_mira.md"
+    hidden_items: ["C2-H1", "C2-H2", "C2-H3", "C2-H4"]
+    
+  C3:
+    name: "Urban Mobility"
+    brief_file: "v2/content/clients/C3_brief.md"
+    private_material:
+      nia: "v2/content/private/C3_nia.md"
+      theo: "v2/content/private/C3_theo.md"
+      rhys: "v2/content/private/C3_rhys.md"
+      mira: "v2/content/private/C3_mira.md"
+    hidden_items: ["C3-H1", "C3-H2", "C3-H3", "C3-H4"]
+    
+  C4:
+    name: "HealthFirst"
+    brief_file: "v2/content/clients/C4_brief.md"
+    private_material:
+      nia: "v2/content/private/C4_nia.md"
+      theo: "v2/content/private/C4_theo.md"
+      rhys: "v2/content/private/C4_rhys.md"
+      mira: "v2/content/private/C4_mira.md"
+    hidden_items: ["C4-H1", "C4-H2", "C4-H3", "C4-H4"]
+    
+  C5:
+    name: "FinTech Innovations"
+    brief_file: "v2/content/clients/C5_brief.md"
+    private_material:
+      nia: "v2/content/private/C5_nia.md"
+      theo: "v2/content/private/C5_theo.md"
+      rhys: "v2/content/private/C5_rhys.md"
+      mira: "v2/content/private/C5_mira.md"
+    hidden_items: ["C5-H1", "C5-H2", "C5-H3", "C5-H4"]
+    
+  C6:
+    name: "EcoBuild"
+    brief_file: "v2/content/clients/C6_brief.md"
+    private_material:
+      nia: "v2/content/private/C6_nia.md"
+      theo: "v2/content/private/C6_theo.md"
+      rhys: "v2/content/private/C6_rhys.md"
+      mira: "v2/content/private/C6_mira.md"
+    hidden_items: ["C6-H1", "C6-H2", "C6-H3", "C6-H4"]
+    
+  C7:
+    name: "Global Logistics"
+    brief_file: "v2/content/clients/C7_brief.md"
+    private_material:
+      nia: "v2/content/private/C7_nia.md"
+      theo: "v2/content/private/C7_theo.md"
+      rhys: "v2/content/private/C7_rhys.md"
+      mira: "v2/content/private/C7_mira.md"
+    hidden_items: ["C7-H1", "C7-H2", "C7-H3", "C7-H4"]
+    fixed_last: true  # This is the 7th client, always last
+
+# ============================================================================
+# SEVENTH CLIENT CONFIGURATION
+# ============================================================================
+seventh_client:
+  reference_pack_available: false  # Config flag - open decision for researchers
+
+# ============================================================================
+# PRACTICE EXERCISES (4 exercises)
+# ============================================================================
+practice:
+  exercises:
+    - id: "exercise_1"
+      title: "Message the whole team"
+      description: "Send a message to the entire team without using @mention."
+      expected_action: "message_sent"
+      expected_addressees: "all"
+      scripted_reply: "Team received your message. Well done!"
+      next_unlocked: "exercise_2"
+      
+    - id: "exercise_2"
+      title: "Message one specialist"
+      description: "Send a message to one specialist using @mention (e.g., @Nia)."
+      expected_action: "message_sent"
+      expected_addressees: "single"
+      scripted_reply: "Specialist received your message. Great job using @mention!"
+      next_unlocked: "exercise_3"
+      
+    - id: "exercise_3"
+      title: "Read the panel"
+      description: "Read the orchestrator panel and ask the orchestrator a question in the chat."
+      expected_action: "message_sent"
+      expected_addressees: "orchestrator"
+      scripted_reply: "Orchestrator: Your question has been noted. The panel provides team status information."
+      next_unlocked: "exercise_4"
+      
+    - id: "exercise_4"
+      title: "Practice the role"
+      description: "Practice using the card editor based on your role."
+      # Different per role - will be configured dynamically
+      next_unlocked: "practice_complete"
+      
+  # Role-specific practice configurations
+  role_practice:
+    passive:
+      exercise_4_description: "Read the practice card and submit it (no changes allowed)."
+      check_question: "What is your role in this task?"
+      correct_answer: "Passive"
+      
+    evaluative:
+      exercise_4_description: "Use keep, cut, and send-back controls on the practice card."
+      check_question: "What controls are available in evaluative mode?"
+      correct_answer: "keep, cut, send back"
+      
+    generative:
+      exercise_4_description: "Write in the card editor to add your contributions."
+      check_question: "What is required for submission in generative mode?"
+      correct_answer: "minimum typed text"
+      
+    none:
+      exercise_4_description: "Open a reference pack section and write a card field."
+      check_question: "What do you use instead of chat in NOAI condition?"
+      correct_answer: "reference pack"
+
+# ============================================================================
+# CHECK-IN QUESTIONS (5 items)
+# ============================================================================
+checkin:
+  items:
+    - id: "checkin_1"
+      question: "How clear were the client requirements?"
+      type: "likert"
+      options: ["Very unclear", "Unclear", "Neutral", "Clear", "Very clear"]
+      
+    - id: "checkin_2"
+      question: "Which specialist was most helpful?"
+      type: "multiple_choice"
+      options: ["Nia", "Theo", "Rhys", "Mira", "None"]
+      
+    - id: "checkin_3"
+      question: "How confident are you in the card?"
+      type: "likert"
+      options: ["Not confident", "Slightly confident", "Moderately confident", "Very confident", "Completely confident"]
+      
+    - id: "checkin_4"
+      question: "How well did the team work together?"
+      type: "likert"
+      options: ["Poorly", "Below average", "Average", "Above average", "Excellent"]
+      
+    - id: "checkin_5"
+      question: "How useful was the orchestrator panel?"
+      type: "likert"
+      options: ["Not useful", "Slightly useful", "Moderately useful", "Very useful", "Extremely useful"]
+      skip_for_noai: true  # Skipped in NOAI condition
+
+# ============================================================================
+# PAGE TEXT CONTENT
+# ============================================================================
+text:
+  # Entry page
+  entry:
+    invalid_link: "Invalid entry link. Please check the URL."
+    used_link: "This link has already been used. Each participant can only start one session."
+    mobile_device: "This study requires a desktop browser. Please use a desktop computer."
+    
+  # Orientation page
+  orientation:
+    title: "Welcome to Interaction Portal"
+    content: |
+      Thank you for participating in this study.
+      
+      You will be working with a team of five AI agents on seven client tasks. Each task has specific requirements that you need to address.
+      
+      The team consists of:
+      - Four specialists (Nia, Theo, Rhys, Mira) who each hold private information
+      - One orchestrator who assigns work among the specialists
+      
+      Your role will be explained on the next page. Please read all instructions carefully.
+      
+      **Important:** Do not enter any personal information. Only your participant ID (pid) is used to identify your session.
+    continue_button: "Continue to Meet Your Team"
+    minimum_reading_message: "Please continue reading..."
+    
+  # Meet Your Team page
+  meet_team:
+    title: "Meet Your Team"
+    introduction: "Here are the team members you will be working with:"
+    orchestrator_description: "The orchestrator assigns work among the specialists and provides team status updates."
+    
+  # Your Role page
+  role:
+    title: "Your Role"
+    passive: |
+      **Passive Role**
+      
+      In this session, your role is passive. You will:
+      - Read the client brief and requirements
+      - Review the card prepared by the team
+      - Submit the card as-is (no changes allowed)
+      
+      The card is read-only. Your job is to carefully review and confirm the team's work.
+    
+    evaluative: |
+      **Evaluative Role**
+      
+      In this session, your role is evaluative. You will:
+      - Read the client brief and requirements
+      - Review each field of the card
+      - Use keep, cut, and send-back controls to refine the card
+      - Submit the final version
+      
+      You can modify the card by keeping good content, cutting unnecessary parts, and sending back fields that need work.
+    
+    generative: |
+      **Generative Role**
+      
+      In this session, your role is generative. You will:
+      - Read the client brief and requirements
+      - Contribute to the card by typing your own text
+      - Submit the card with your contributions
+      
+      The card editor requires a minimum amount of typed text from you before submission.
+    
+    continue_button: "Continue to Practice"
+    
+  # Practice page
+  practice:
+    title: "Practice Exercises"
+    introduction: "Complete these practice exercises to familiarize yourself with the interface."
+    complete_message: "Practice complete! You're ready to begin."
+    
+  # Client Brief page
+  client_brief:
+    title: "Client Brief"
+    requirements_label: "Requirements:"
+    card_fields_label: "Card Fields:"
+    continue_button: "Start Task"
+    
+  # Task page
+  task:
+    title: "Task Page"
+    role_reminder:
+      passive: "Remember: Your role is passive. Review and submit the card as-is."
+      evaluative: "Remember: Your role is evaluative. Use keep/cut/send-back to refine the card."
+      generative: "Remember: Your role is generative. Add your typed contributions to the card."
+      none: ""
+    team_chat_label: "Team Chat"
+    panel_label: "Orchestrator Panel"
+    card_editor_label: "Card Editor"
+    submit_button: "Submit Card"
+    timer_label: "Time remaining"
+    
+  # Submission page
+  submission:
+    title: "Review Submission"
+    instruction: "Review your card one final time before submission."
+    submit_button: "Confirm Submission"
+    back_button: "Back to Edit"
+    
+  # Check-in page
+  checkin:
+    title: "Check-in Questions"
+    instruction: "Please answer these questions about the completed task."
+    submit_button: "Submit Answers"
+    
+  # Break page
+  break_page:
+    title: "Break Time"
+    message: "Take a short break. You can end the break early if you're ready to continue."
+    end_break_button: "End Break Early"
+    
+  # Seventh Client page
+  seventh_client:
+    title: "Final Client Task"
+    instruction: "This is your final task. Complete it alone without the team."
+    
+  # Exit page
+  exit:
+    title: "Thank You!"
+    message: "You have completed all tasks. Thank you for your participation."
+    completion_code_label: "Your completion code:"
+    redirect_message: "You will be redirected back to Qualtrics shortly..."
+
+# ============================================================================
+# CARD EDITOR CONFIGURATION
+# ============================================================================
+card_editor:
+  fields:
+    - id: "field_1"
+      label: "Client Needs"
+      placeholder: "Describe the client's main needs..."
+      required: true
+      
+    - id: "field_2"
+      label: "Solution Approach"
+      placeholder: "Outline the proposed solution..."
+      required: true
+      
+    - id: "field_3"
+      label: "Resources Required"
+      placeholder: "List required resources..."
+      required: true
+      
+    - id: "field_4"
+      label: "Timeline"
+      placeholder: "Provide timeline estimates..."
+      required: true
+      
+    - id: "field_5"
+      label: "Budget Considerations"
+      placeholder: "Note budget constraints..."
+      required: true
+  
+  # Provenance tracking
+  provenance:
+    track_author: true
+    track_history: true
+    track_span_id: true
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+logging:
+  log_file: "v2/logs/events.log"
+  json_log_file: "v2/logs/events.jsonl"
+  session_store: "v2/data/sessions.json"
+  backup_frequency: "daily"  # Nightly backup
+  export_formats: ["csv", "json"]
+  
+  # What to log (all enabled by default)
+  log_events:
+    session_start: true
+    session_end: true
+    page_enter: true
+    page_leave: true
+    window_blur: true
+    window_focus: true
+    practice_step: true
+    role_check: true
+    message_sent: true
+    agent_reply: true
+    orch_message: true
+    fold_open: true
+    fold_close: true
+    panel_shown: true
+    card_action: true
+    card_submit: true
+    checkin_answer: true
+    pack_open: true
+    pack_close: true
+    timer_expired: true
+    break_start: true
+    break_end: true
+    agent_error: true
+    scroll_sample: true
+
+# ============================================================================
+# UI CONFIGURATION
+# ============================================================================
+ui:
+  theme: "default"
+  layout: "three_column"  # Left: brief/role, Middle: chat, Right: panel/card
+  responsive: false  # Desktop-only
+  
+  # Folded blocks
+  folded_blocks:
+    enabled: true
+    collapsed_by_default: true
+    label_format: "{agents} - {count} messages - {time}"
+    
+  # Chat
+  chat:
+    autocomplete_enabled: true
+    max_message_length: 1000
+    show_timestamps: true
+    
+  # Panel
+  panel:
+    refresh_interval: 60  # seconds
+    max_word_count: 100
+    
+  # Card
+  card:
+    min_height: "400px"
+    field_min_height: "80px"
+    show_provenance: true
+
+# ============================================================================
+# ADMIN CONFIGURATION
+# ============================================================================
+admin:
+  export_page_enabled: true
+  backup_directory: "v2/backups"
+  max_backups: 30  # Keep last 30 days of backups
