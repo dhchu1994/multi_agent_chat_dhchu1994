@@ -276,72 +276,72 @@ panel:
 clients:
   C1:
     name: "Lumen Skincare"
-    brief_file: "v2/content/clients/C1_brief.md"
+    brief_file: "content/clients/C1_brief.md"
     private_material:
-      nia: "v2/content/private/C1_nia.md"
-      theo: "v2/content/private/C1_theo.md"
-      rhys: "v2/content/private/C1_rhys.md"
-      mira: "v2/content/private/C1_mira.md"
+      nia: "content/private/C1_nia.md"
+      theo: "content/private/C1_theo.md"
+      rhys: "content/private/C1_rhys.md"
+      mira: "content/private/C1_mira.md"
     hidden_items: ["C1-H1", "C1-H2", "C1-H3", "C1-H4"]
     
   C2:
     name: "GreenTech Solutions"
-    brief_file: "v2/content/clients/C2_brief.md"
+    brief_file: "content/clients/C2_brief.md"
     private_material:
-      nia: "v2/content/private/C2_nia.md"
-      theo: "v2/content/private/C2_theo.md"
-      rhys: "v2/content/private/C2_rhys.md"
-      mira: "v2/content/private/C2_mira.md"
+      nia: "content/private/C2_nia.md"
+      theo: "content/private/C2_theo.md"
+      rhys: "content/private/C2_rhys.md"
+      mira: "content/private/C2_mira.md"
     hidden_items: ["C2-H1", "C2-H2", "C2-H3", "C2-H4"]
     
   C3:
     name: "Urban Mobility"
-    brief_file: "v2/content/clients/C3_brief.md"
+    brief_file: "content/clients/C3_brief.md"
     private_material:
-      nia: "v2/content/private/C3_nia.md"
-      theo: "v2/content/private/C3_theo.md"
-      rhys: "v2/content/private/C3_rhys.md"
-      mira: "v2/content/private/C3_mira.md"
+      nia: "content/private/C3_nia.md"
+      theo: "content/private/C3_theo.md"
+      rhys: "content/private/C3_rhys.md"
+      mira: "content/private/C3_mira.md"
     hidden_items: ["C3-H1", "C3-H2", "C3-H3", "C3-H4"]
     
   C4:
     name: "HealthFirst"
-    brief_file: "v2/content/clients/C4_brief.md"
+    brief_file: "content/clients/C4_brief.md"
     private_material:
-      nia: "v2/content/private/C4_nia.md"
-      theo: "v2/content/private/C4_theo.md"
-      rhys: "v2/content/private/C4_rhys.md"
-      mira: "v2/content/private/C4_mira.md"
+      nia: "content/private/C4_nia.md"
+      theo: "content/private/C4_theo.md"
+      rhys: "content/private/C4_rhys.md"
+      mira: "content/private/C4_mira.md"
     hidden_items: ["C4-H1", "C4-H2", "C4-H3", "C4-H4"]
     
   C5:
     name: "FinTech Innovations"
-    brief_file: "v2/content/clients/C5_brief.md"
+    brief_file: "content/clients/C5_brief.md"
     private_material:
-      nia: "v2/content/private/C5_nia.md"
-      theo: "v2/content/private/C5_theo.md"
-      rhys: "v2/content/private/C5_rhys.md"
-      mira: "v2/content/private/C5_mira.md"
+      nia: "content/private/C5_nia.md"
+      theo: "content/private/C5_theo.md"
+      rhys: "content/private/C5_rhys.md"
+      mira: "content/private/C5_mira.md"
     hidden_items: ["C5-H1", "C5-H2", "C5-H3", "C5-H4"]
     
   C6:
     name: "EcoBuild"
-    brief_file: "v2/content/clients/C6_brief.md"
+    brief_file: "content/clients/C6_brief.md"
     private_material:
-      nia: "v2/content/private/C6_nia.md"
-      theo: "v2/content/private/C6_theo.md"
-      rhys: "v2/content/private/C6_rhys.md"
-      mira: "v2/content/private/C6_mira.md"
+      nia: "content/private/C6_nia.md"
+      theo: "content/private/C6_theo.md"
+      rhys: "content/private/C6_rhys.md"
+      mira: "content/private/C6_mira.md"
     hidden_items: ["C6-H1", "C6-H2", "C6-H3", "C6-H4"]
     
   C7:
     name: "Global Logistics"
-    brief_file: "v2/content/clients/C7_brief.md"
+    brief_file: "content/clients/C7_brief.md"
     private_material:
-      nia: "v2/content/private/C7_nia.md"
-      theo: "v2/content/private/C7_theo.md"
-      rhys: "v2/content/private/C7_rhys.md"
-      mira: "v2/content/private/C7_mira.md"
+      nia: "content/private/C7_nia.md"
+      theo: "content/private/C7_theo.md"
+      rhys: "content/private/C7_rhys.md"
+      mira: "content/private/C7_mira.md"
     hidden_items: ["C7-H1", "C7-H2", "C7-H3", "C7-H4"]
     fixed_last: true  # This is the 7th client, always last
 
@@ -607,9 +607,9 @@ card_editor:
 # LOGGING CONFIGURATION
 # ============================================================================
 logging:
-  log_file: "v2/logs/events.log"
-  json_log_file: "v2/logs/events.jsonl"
-  session_store: "v2/data/sessions.json"
+  log_file: "logs/events.log"
+  json_log_file: "logs/events.jsonl"
+  session_store: "data/sessions.json"
   backup_frequency: "daily"  # Nightly backup
   export_formats: ["csv", "json"]
   
@@ -676,5 +676,5 @@ ui:
 # ============================================================================
 admin:
   export_page_enabled: true
-  backup_directory: "v2/backups"
+  backup_directory: "backups"
   max_backups: 30  # Keep last 30 days of backups

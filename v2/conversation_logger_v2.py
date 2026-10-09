@@ -67,6 +67,7 @@ class Event:
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
+@dataclass
 class SessionStartEvent(Event):
     """Session start event"""
     condition_code: str
@@ -109,6 +110,7 @@ class SessionStartEvent(Event):
         return base
 
 
+@dataclass
 class SessionEndEvent(Event):
     """Session end event"""
     end_state: str
@@ -138,6 +140,7 @@ class SessionEndEvent(Event):
         return base
 
 
+@dataclass
 class PageEvent(Event):
     """Page enter/leave event"""
     page_id: str
@@ -159,6 +162,7 @@ class PageEvent(Event):
         return base
 
 
+@dataclass
 class WindowEvent(Event):
     """Window blur/focus event"""
     def __init__(self, event_type: str, pid: str, client: str = None, page: str = None):
@@ -171,6 +175,7 @@ class WindowEvent(Event):
         )
 
 
+@dataclass
 class PracticeStepEvent(Event):
     """Practice step completed"""
     step_id: str
@@ -200,6 +205,7 @@ class PracticeStepEvent(Event):
         return base
 
 
+@dataclass
 class RoleCheckEvent(Event):
     """Role check event (practice exercise 4)"""
     answer: str
@@ -229,6 +235,7 @@ class RoleCheckEvent(Event):
         return base
 
 
+@dataclass
 class MessageSentEvent(Event):
     """Participant sends a message"""
     text: str
@@ -261,6 +268,7 @@ class MessageSentEvent(Event):
         return base
 
 
+@dataclass
 class AgentReplyEvent(Event):
     """Specialist reply event"""
     agent: str
@@ -318,6 +326,7 @@ class AgentReplyEvent(Event):
         return base
 
 
+@dataclass
 class OrchMessageEvent(Event):
     """Orchestrator to specialist message"""
     to: str
@@ -347,6 +356,7 @@ class OrchMessageEvent(Event):
         return base
 
 
+@dataclass
 class FoldEvent(Event):
     """Fold open/close event"""
     block_id: str
@@ -368,6 +378,7 @@ class FoldEvent(Event):
         return base
 
 
+@dataclass
 class PanelShownEvent(Event):
     """Panel text appears or changes"""
     level: str
@@ -400,6 +411,7 @@ class PanelShownEvent(Event):
         return base
 
 
+@dataclass
 class CardActionEvent(Event):
     """Card action event"""
     field: str
@@ -443,6 +455,7 @@ class CardActionEvent(Event):
         return base
 
 
+@dataclass
 class CardSubmitEvent(Event):
     """Card submission event"""
     full_card: Dict
@@ -472,6 +485,7 @@ class CardSubmitEvent(Event):
         return base
 
 
+@dataclass
 class CheckinAnswerEvent(Event):
     """Check-in answer event"""
     item_id: str
@@ -501,6 +515,7 @@ class CheckinAnswerEvent(Event):
         return base
 
 
+@dataclass
 class PackEvent(Event):
     """Reference pack open/close event (NOAI condition)"""
     section: str
@@ -522,6 +537,7 @@ class PackEvent(Event):
         return base
 
 
+@dataclass
 class TimerExpiredEvent(Event):
     """Timer expired event"""
     def __init__(self, pid: str, client: str = None, page: str = None):
@@ -534,6 +550,7 @@ class TimerExpiredEvent(Event):
         )
 
 
+@dataclass
 class BreakEvent(Event):
     """Break start/end event"""
     ended_early: bool
@@ -555,6 +572,7 @@ class BreakEvent(Event):
         return base
 
 
+@dataclass
 class AgentErrorEvent(Event):
     """Agent error event"""
     agent: str
@@ -584,6 +602,7 @@ class AgentErrorEvent(Event):
         return base
 
 
+@dataclass
 class ScrollSampleEvent(Event):
     """Scroll position sample event"""
     scroll_position: float
@@ -639,7 +658,7 @@ class SessionRecord:
 class ConversationLoggerV2:
     """Logger for all events in Interaction Portal v2"""
     
-    def __init__(self, config_path: str = "v2/config_v2.yaml"):
+    def __init__(self, config_path: str = "config_v2.yaml"):
         self.config = get_config(config_path)
         self.log_file = self.config.logging.log_file
         self.json_log_file = self.config.logging.json_log_file
@@ -1014,7 +1033,7 @@ class ConversationLoggerV2:
 _logger: Optional[ConversationLoggerV2] = None
 
 
-def get_logger(config_path: str = "v2/config_v2.yaml") -> ConversationLoggerV2:
+def get_logger(config_path: str = "config_v2.yaml") -> ConversationLoggerV2:
     """Get or create global logger instance"""
     global _logger
     if _logger is None:

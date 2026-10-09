@@ -225,18 +225,18 @@ Edit `config_v2.yaml` to customize:
 Create content files in the `content/` directory:
 
 ```bash
-mkdir -p v2/content/clients v2/content/private v2/content/reference_packs
+mkdir -p content/clients content/private content/reference_packs
 ```
 
 Each client needs:
-- `v2/content/clients/{client_id}_brief.md` - Client brief
-- `v2/content/private/{client_id}_{agent}.md` - Private material for each specialist
+- `content/clients/{client_id}_brief.md` - Client brief
+- `content/private/{client_id}_{agent}.md` - Private material for each specialist
 
 ## Data Storage
 
-- **Logs**: `v2/logs/events.log` and `v2/logs/events.jsonl`
-- **Sessions**: `v2/data/sessions.json`
-- **Backups**: `v2/backups/` (daily backups)
+- **Logs**: `logs/events.log` and `logs/events.jsonl`
+- **Sessions**: `data/sessions.json`
+- **Backups**: `backups/` (daily backups)
 
 ## Export
 

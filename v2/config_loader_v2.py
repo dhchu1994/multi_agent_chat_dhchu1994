@@ -177,9 +177,9 @@ class CardEditorConfig:
 @dataclass
 class LoggingConfig:
     """Logging configuration"""
-    log_file: str = "v2/logs/events.log"
-    json_log_file: str = "v2/logs/events.jsonl"
-    session_store: str = "v2/data/sessions.json"
+    log_file: str = "logs/events.log"
+    json_log_file: str = "logs/events.jsonl"
+    session_store: str = "data/sessions.json"
     backup_frequency: str = "daily"
     export_formats: List[str] = field(default_factory=lambda: ["csv", "json"])
     log_events: Dict[str, bool] = field(default_factory=lambda: {
@@ -243,7 +243,7 @@ class UIConfig:
 class AdminConfig:
     """Admin configuration"""
     export_page_enabled: bool = True
-    backup_directory: str = "v2/backups"
+    backup_directory: str = "backups"
     max_backups: int = 30
 
 
@@ -299,7 +299,7 @@ class FullConfig:
 class ConfigLoaderV2:
     """Loader for Interaction Portal v2 configuration"""
     
-    def __init__(self, config_path: str = "v2/config_v2.yaml"):
+    def __init__(self, config_path: str = "config_v2.yaml"):
         self.config_path = config_path
         self.config: Optional[FullConfig] = None
         self._validate_paths = True
@@ -569,7 +569,7 @@ class ConfigLoaderV2:
 _config_loader: Optional[ConfigLoaderV2] = None
 
 
-def get_config_loader(config_path: str = "v2/config_v2.yaml") -> ConfigLoaderV2:
+def get_config_loader(config_path: str = "config_v2.yaml") -> ConfigLoaderV2:
     """Get or create global config loader"""
     global _config_loader
     if _config_loader is None:
@@ -577,7 +577,7 @@ def get_config_loader(config_path: str = "v2/config_v2.yaml") -> ConfigLoaderV2:
     return _config_loader
 
 
-def get_config(config_path: str = "v2/config_v2.yaml") -> FullConfig:
+def get_config(config_path: str = "config_v2.yaml") -> FullConfig:
     """Get loaded configuration"""
     loader = get_config_loader(config_path)
     if loader.config is None:
