@@ -275,12 +275,12 @@ class ApplicationConfig:
 @dataclass
 class FullConfig:
     """Complete configuration for Interaction Portal v2"""
-    application: ApplicationConfig = field(default_factory=ApplicationConfig)
     model: ModelConfig
+    agents: AgentsConfig
+    application: ApplicationConfig = field(default_factory=ApplicationConfig)
     qualtrics: QualtricsConfig = field(default_factory=QualtricsConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
     conditions: Dict[str, ConditionConfig] = field(default_factory=dict)
-    agents: AgentsConfig
     clients: Dict[str, ClientConfig] = field(default_factory=dict)
     seventh_client: Dict[str, Any] = field(default_factory=dict)
     practice: PracticeConfig = field(default_factory=PracticeConfig)
