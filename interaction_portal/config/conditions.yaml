@@ -1,0 +1,18 @@
+# The ten between-subject conditions. The condition code is passed in the entry
+# link (?pid=...&condition=CODE). Only the card editor and the orchestrator
+# panel change between the nine AI conditions; every other page is identical.
+#
+#   role:         passive | evaluative | generative | none
+#   panel_level:  coordination | task_focused | developmental | none
+#   ai:           false removes the team, chat, panel, team page and role page
+conditions:
+  PAS-COORD: { role: passive,    panel_level: coordination, ai: true }
+  PAS-TASK:  { role: passive,    panel_level: task_focused, ai: true }
+  PAS-DEV:   { role: passive,    panel_level: developmental, ai: true }
+  EVA-COORD: { role: evaluative, panel_level: coordination, ai: true }
+  EVA-TASK:  { role: evaluative, panel_level: task_focused, ai: true }
+  EVA-DEV:   { role: evaluative, panel_level: developmental, ai: true }
+  GEN-COORD: { role: generative, panel_level: coordination, ai: true }
+  GEN-TASK:  { role: generative, panel_level: task_focused, ai: true }
+  GEN-DEV:   { role: generative, panel_level: developmental, ai: true }
+  NOAI:      { role: none,       panel_level: none,         ai: false }

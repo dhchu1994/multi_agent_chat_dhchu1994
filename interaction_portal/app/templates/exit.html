@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block header_left %}<b>{{ t('exit.header') }}</b>{% endblock %}
+{% block body %}
+<div class="content center">
+  <h1>{{ t('exit.title') }}</h1>
+  <p>{{ t('exit.body_standalone') if standalone else t('exit.body') }}</p>
+  <div>{{ t('exit.code_label') }}</div>
+  <div class="code" id="completion-code">{{ code }}</div>
+  {% if exit_url %}
+  <p><a class="btn primary" id="exit-link" href="{{ exit_url }}">{{ t('exit.continue_link') }}</a></p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% if exit_url %}<script>setTimeout(() => { location.href = {{ exit_url|tojson }}; }, 6000);</script>{% endif %}
+{% endblock %}

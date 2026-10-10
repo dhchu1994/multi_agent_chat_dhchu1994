@@ -1,0 +1,547 @@
+# =============================================================================
+# Interaction Portal (v2) - core configuration
+# =============================================================================
+# Everything that may change between studies lives here, in conditions.yaml, in
+# config/prompts/ or in config/content/. The application code contains
+# mechanics only. Bump `config_version` whenever anything here changes: it is
+# stored on every session record and in every session_start event.
+
+config_version: "2.0.0"
+study_title: "Interaction Portal"
+
+# ---------------------------------------------------------------------------
+# Testing without Qualtrics or a model provider
+# ---------------------------------------------------------------------------
+# standalone_mode: true  -> http://localhost:8000/ shows a test launcher where you pick a
+#                           condition (a pid is generated), the same link format
+#                           ?pid=...&condition=... also still works, the exit page
+#                           shows the completion code and does NOT redirect.
+# standalone_mode: false -> production: pid and condition are mandatory and the
+#                           participant is redirected to Qualtrics at the end.
+# Every value can be overridden by an environment variable (PORTAL_STANDALONE=1|0,
+# PORTAL_LLM_PROVIDER=mock|openai, PORTAL_TIMER_SCALE=0.05, ...).
+testing:
+  standalone_mode: true
+  # Divide every server timer and minimum reading time by this factor (1 = real time).
+  timer_scale: 1.0
+  # Skip the phone/tablet block (handy when testing with device emulation).
+  allow_mobile: false
+  # Admin export token for /admin/export/*. In production set PORTAL_ADMIN_TOKEN instead.
+  admin_token: "admin-test-token"
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+server:
+  host: "0.0.0.0"
+  port: 8000
+  # Signs the session cookie. Override with PORTAL_SECRET_KEY in production.
+  secret_key: "change-me-in-production"
+  min_viewport_width: 900
+
+# ---------------------------------------------------------------------------
+# Model provider. One pinned model version for all five agents and the panel.
+# The API key is read from the environment variable named in api_key_env and is
+# never stored in this file.
+# ---------------------------------------------------------------------------
+llm:
+  # mock   = deterministic offline model (no network, no key). Used for tests.
+  # openai = any OpenAI-compatible chat-completions endpoint.
+  provider: "mock"
+  base_url: "https://api.openai.com/v1"
+  api_key_env: "OPENAI_API_KEY"
+  model: "gpt-4o-mini-2024-07-18"       # pinned; changing it means rerunning both harnesses
+  timeout_seconds: 60
+  retries: 1                            # one automatic retry, then a neutral chat line
+  specialist_temperature: 0.3
+  orchestrator_temperature: 0.3
+  panel_temperature: 0.4
+  specialist_max_tokens: 400
+  orchestrator_max_tokens: 300
+  panel_max_tokens: 220
+  # Simulated typing: seconds between characters revealed in the chat bubble (display only).
+  live_typing_delay: 0.012
+
+# ---------------------------------------------------------------------------
+# Session, timers and resume rule
+# ---------------------------------------------------------------------------
+timers:
+  task_seconds: 600
+  break_seconds: 120
+  orientation_min_seconds: 15
+  team_min_seconds: 0
+  role_min_seconds: 10
+  brief_min_seconds: 10
+  # Resume with a gap cut-off (Q1): a participant returning within this many seconds of
+  # their last activity resumes exactly where they stopped; after it the session ends as
+  # "abandoned_timeout" and the link stays locked.
+  resume_gap_seconds: 900
+
+# ---------------------------------------------------------------------------
+# Client sequence
+# ---------------------------------------------------------------------------
+clients:
+  randomised: [C1, C2, C3, C4, C5, C6]
+  fixed_last: C7
+  break_after_position: 3          # break after the third randomised client
+  seventh_client_pack: false       # reference pack available on the seventh client?
+  content_dir: "content/clients"
+
+# Five fixed fields on every card.
+card:
+  fields:
+    - { id: audience_angle,    label: "Audience and angle",   hint: "Who the campaign speaks to and the angle it takes." }
+    - { id: creative_concept,  label: "Creative concept",     hint: "The central creative idea in one or two sentences." }
+    - { id: channel_format,    label: "Channel and format",   hint: "Where it runs and in what format." }
+    - { id: compliance_note,   label: "Compliance note",      hint: "Any claim or wording rule the campaign must respect." }
+    - { id: stated_constraint, label: "One stated constraint", hint: "One constraint from the brief that the plan respects." }
+
+# Card editor rules per role.
+editor:
+  send_back_needs_reason: true
+  min_typed_share: 0.25            # generative: share of submitted characters typed by the participant
+  max_span_chars: 600
+
+# ---------------------------------------------------------------------------
+# Orchestrator panel
+# ---------------------------------------------------------------------------
+panel:
+  word_budget: [60, 80]            # one number shared by all three levels
+  word_target: 70
+  refresh_min_seconds: 60          # at most once a minute
+  name_unasked: true               # may the panel name specialists who have not been asked yet?
+  forbidden_language: "Do not tell the participant what to do (no imperatives such as 'you should', 'ask', 'try', 'make sure'). Do not state client facts."
+  sections:
+    coordination: ["Team status"]
+    task_focused: ["Team status", "On the card"]
+    developmental: ["Team status", "On the card", "Why it recurs"]
+  title: "From the orchestrator"
+  footer: "One-way: it reports and diagnoses but never says what you should do. That is what keeps this motor separate from your role."
+  empty: "The orchestrator has not reported yet."
+
+# ---------------------------------------------------------------------------
+# Team
+# ---------------------------------------------------------------------------
+orchestrator:
+  name: "Orchestrator"
+  role_label: "Coordination"
+  tagline: "Assigns the work among the four"
+  max_assignments: 3
+  description_by_level:
+    coordination: "Present for everyone, and always assigns work in full view. It knows who holds what; it does not hold the material itself. What it supplies to you differs by condition: here, a status report on the team's work."
+    task_focused: "Present for everyone, and always assigns work in full view. It knows who holds what; it does not hold the material itself. What it supplies to you differs by condition: here, status plus a diagnosis of the card."
+    developmental: "Present for everyone, and always assigns work in full view. It knows who holds what; it does not hold the material itself. What it supplies to you differs by condition: here, status plus diagnosis plus the principle behind it."
+
+specialists:
+  - name: "Nia"
+    initial: "N"
+    role_label: "Client analyst"
+    team_description: "Holds the client's own notes on what matters to them."
+    domain: "Client priorities, target audience and the client's intent. Nia holds the client's own notes."
+    private_file: "nia.md"
+    domain_keywords: [audience, who, customer, client, priority, priorities, matter, intent, goal, want, wants, care, cares, notes, success, target, speak]
+    hidden_keywords: [priority, priorities, matter, matters, care, cares, beyond, really, unstated, goal, goals, success, want, wants, important, anything else, notes]
+    card_fields: [audience_angle]
+    color: "#e3ebf8"
+  - name: "Theo"
+    initial: "T"
+    role_label: "Creative"
+    team_description: "Holds the asset library and the brand guidelines."
+    domain: "Brand identity, tone of voice and the creative assets that exist. Theo holds the asset library and the brand guidelines."
+    private_file: "theo.md"
+    domain_keywords: [asset, assets, brand, visual, visuals, photo, photos, image, images, imagery, tone, voice, creative, concept, palette, design, library, style, look, mascot, illustration]
+    hidden_keywords: [asset, assets, brand rule, brand rules, rules, library, photo, photos, imagery, visual, visuals, image, images, guideline, guidelines, respect]
+    card_fields: [creative_concept]
+    color: "#e8f3ea"
+  - name: "Rhys"
+    initial: "R"
+    role_label: "Compliance"
+    team_description: "Holds licence status and the category's restrictions."
+    domain: "Legal and regulatory claims and category restrictions. Rhys holds the compliance register."
+    private_file: "rhys.md"
+    domain_keywords: [claim, claims, legal, compliance, regulatory, regulation, allowed, restrict, restriction, restrictions, wording, licence, license, law, forbidden, permitted, say, endorsement]
+    hidden_keywords: [claim, claims, wording, say, restrict, restriction, restrictions, legal, compliance, forbidden, allowed, permitted, cannot, words]
+    card_fields: [compliance_note]
+    color: "#fbefe0"
+  - name: "Mira"
+    initial: "M"
+    role_label: "Production"
+    team_description: "Holds platform specifications, lead times and budget."
+    domain: "Technical platform specifications, production budget and lead times. Mira holds the production specifications."
+    private_file: "mira.md"
+    domain_keywords: [format, formats, budget, platform, lead, time, production, channel, channels, spec, specs, specification, specifications, deadline, cost, character, characters, print, email, video, limit, limits, technical]
+    hidden_keywords: [limit, limits, budget, lead time, deadline, cost, constraint, constraints, produce, deliver, delivered, fit, money, afford]
+    card_fields: [channel_format, stated_constraint]
+    color: "#f0e8f6"
+
+# Reference pack (NOAI): section titles, in this order, built from the same private files.
+reference_pack:
+  sections:
+    - { agent: "Nia",  title: "Client notes" }
+    - { agent: "Theo", title: "Creative and brand" }
+    - { agent: "Rhys", title: "Compliance" }
+    - { agent: "Mira", title: "Production" }
+
+# ---------------------------------------------------------------------------
+# Participant-facing text
+# ---------------------------------------------------------------------------
+pages:
+  common:
+    continue: "Continue"
+    submit: "Submit card"
+    time_remaining: "remaining"
+    unlocks_in: "Continue unlocks in {seconds}"
+    privacy_reminder: "Please do not type any personal information into the portal."
+  errors:
+    missing_link: "This study link is incomplete. Please return to the survey and use the link you were given."
+    bad_condition: "This study link is not valid. Please return to the survey and use the link you were given."
+    already_used: "This study link has already been used."
+    mobile: "This study requires a desktop or laptop computer with a physical keyboard."
+    small_viewport: "This study requires a desktop or laptop computer with a physical keyboard. Please enlarge your browser window."
+    timeout: "This session ended because there was no activity for too long. The link cannot be used again."
+    ended: "This session has already ended."
+    no_session: "No session was found for this browser. Please open your study link again."
+  orientation:
+    title: "You are about to join a working team"
+    intro_ai: "You run a one-person company. Your team is four AI specialists and an AI orchestrator that assigns the work among them. Each specialist holds information the others cannot see, so no one of them can do a task alone."
+    intro_noai: "You run a one-person company. You will do a series of short client tasks on your own, working from a reference pack of client material."
+    rows_ai:
+      - ["Six clients", "A new client each task. Ten minutes each, with a short break halfway."]
+      - ["Work through chat", "One conversation with everyone in it. Message the whole team, or one teammate, by typing @ and their name."]
+      - ["Short check-in", "After each task you answer five quick questions. Under a minute."]
+      - ["One card per client", "The same five-field recommendation card every time. The last one you do alone, without the team."]
+    rows_noai:
+      - ["Six clients", "A new client each task. Ten minutes each, with a short break halfway."]
+      - ["Reference pack", "For each client you get a reference pack with four sections of client material."]
+      - ["Short check-in", "After each task you answer four quick questions. Under a minute."]
+      - ["One card per client", "The same five-field recommendation card every time. The last one you do alone."]
+    table_headers: ["What you will do", "Detail"]
+    notes_title_ai: "A few things worth knowing."
+    notes_ai: "AI teammates can be confidently wrong. They can produce something that reads well and breaks a rule they could not see. They do not always know what they do not know. You are not expected to accept what they give you."
+    privacy_title: "Privacy."
+    privacy: "Please do not type any personal information into the conversation, about yourself or anyone else. Everything you type is stored for research, kept under European data protection rules, and not linked to your name or contact details."
+    config_tag: "CONFIG: orientation.text, orientation.min_seconds"
+    footer: "All text is configurable. The lockout before Continue becomes active is a fixed mechanic with a configurable duration."
+  team:
+    title: "Your team"
+    intro: "These are the four specialists on your team. Each specialist holds material the others cannot see."
+    config_tag: "CONFIG: specialist names, labels, descriptions, private material"
+    orchestrator_title: "The AI orchestrator"
+    footer: "None of the four can see another's material, and none of them holds enough to produce a correct card alone. Pooling what they hold is the task."
+    header: "Meet your team"
+    header_badge: "no time limit"
+  role:
+    header: "Your role"
+    header_note: "shown once, after the team page"
+    title: "Your role on this team"
+    intro: "This is how you will work with the team. The interface follows this role, so you do not have to remember it."
+    allows_label: "What the interface allows"
+    config_tag: "CONFIG: engagement = passive | evaluative | generative"
+    version_label: "Your role: {role}"
+    table_headers: ["Version", "What the participant is told, in one line", "What the interface allows"]
+    footer: "One check question about your role follows the practice."
+    roles:
+      passive:
+        label: "Passive"
+        title: "Passive"
+        body: "On this team you are the recipient. The specialists do the work and the orchestrator reports to you. For every client you will see the card the team produces and hand it in. You will not be changing the card yourself."
+        one_line: "The specialists do the work. Your job is to follow it and hand in the card they produce."
+        allows: "Read and submit"
+        reminder: "Passive. The team writes the card. You read it and hand it in."
+        initial: "P"
+      evaluative:
+        label: "Evaluative"
+        title: "Evaluative"
+        body: "On this team you are the reviewer. The specialists write: you decide what goes on the card. For every client you will see what the team has produced and keep it, cut it, or send it back with a reason. You will not be writing the card yourself."
+        one_line: "The specialists write; you decide what goes on the card."
+        allows: "Keep, cut, send back"
+        reminder: "Evaluative. The team writes. You decide what goes on the card. Keep it, cut it, or send it back with a reason."
+        initial: "E"
+      generative:
+        label: "Generative"
+        title: "Generative"
+        body: "On this team you are the writer. The specialists help with advice and suggestions, but the card has to be written by you. A set share of the card must be your own typing before you can hand it in."
+        one_line: "The specialists help; the card has to be written by you."
+        allows: "Must write a set share"
+        reminder: "Generative. The specialists help. The card has to be written by you."
+        initial: "G"
+      none:
+        label: "Writer"
+        title: "Writer"
+        body: "You write the card yourself from the reference pack."
+        one_line: "You write the card from the reference pack."
+        allows: "Write the whole card"
+        reminder: "You write the whole card from the reference pack."
+        initial: "W"
+  practice:
+    header: "Practice"
+    sub_header: "exercise {n} of 4"
+    exercise_titles:
+      1: "message the whole team, then one specialist with @"
+      2: "read the panel, then ask the orchestrator something in the chat"
+      3: "practise your own role"
+      4: "submit the practice card and answer one check question"
+    exercise_titles_noai:
+      1: "open a pack section"
+      2: "write a card field"
+    badge: "scripted replies"
+    badge_check: "role check"
+    note: "This is practice. Nothing here counts towards any task, and everyone gets identical practice."
+    chat_title: "TEAM CHAT — PRACTICE"
+    panel_title: "FROM THE ORCHESTRATOR"
+    next_step: "Next step"
+    hand_in_title: "Hand in the practice card"
+    hand_in_intro: "The last exercise ends with the submit step you will use after every task, followed by a single check that the role instruction landed."
+    submit_practice: "Submit practice card"
+    config_tag: "CONFIG: practice steps, scripted replies, check question"
+    all_scripted: "All replies in this practice are scripted. No AI model is called."
+    unlocked_note: "Each step must be done before the next unlocks."
+    done_button: "Done, next step"
+    finish_button: "Finish practice"
+    card_title: "PRACTICE CARD"
+    todo_title: "WHAT TO DO"
+    written_by: "WRITTEN BY {name}"
+    version_badge: "{role} version shown"
+    role_check_title: "Check question"
+    role_check_wrong: "That is not quite right. Let us look at your role again."
+    role_check_right: "Correct."
+  brief:
+    header: "Client brief"
+    sub_header: "Task {n} of {total}, first of three pages"
+    sub_header_last: "Final task, first of three pages"
+    title: "{name} — launch campaign"
+    intro_ai: "You run a one-person company. Each task is a new client. Your team of four does the work; the recommendation goes out under your name."
+    intro_noai: "You run a one-person company. Each task is a new client. You do the work yourself; the recommendation goes out under your name."
+    intro_last: "This is your seventh and last client. This time the team is not available: you write the card yourself."
+    stated_note: "They have given you three requirements. They have not told you everything."
+    requirements_title: "Three stated requirements"
+    card_text: "Your card must contain five fields: {fields}. Same five every task."
+    start: "Start the task"
+    unlocks: "Continue unlocks in {time}"
+    footer: "This is everything the client has stated. Reading time is recorded separately from task time."
+  task:
+    left_title_client: "THIS CLIENT"
+    left_title_task: "THIS TASK"
+    deliverable_title: "YOUR DELIVERABLE"
+    alone_title: "Final task — alone, no team"
+    alone_note_title: "FOR THIS ONE"
+    alone_note: "the team is not available. Write it yourself."
+    hand_in_finish: "Hand in and finish"
+    write_here: "Write here…"
+    noai_note: "No team in this condition. The reference pack holds the same material the specialists would."
+    pack_label: "REFERENCE PACK — {name}"
+    pack_footer: "This is the same material the four specialists would hold for this client."
+    open: "open"
+    close: "close"
+    show: "show"
+    hide: "hide"
+    you: "You"
+    left_title_card: "YOUR CARD"
+    left_hint_ai: "Each specialist holds material you cannot see. Ask them."
+    left_hint_noai: "The reference pack holds the client material. Open the sections to read it."
+    role_title: "YOUR ROLE IN THIS TASK"
+    chat_title: "TEAM CHAT — YOU, FOUR SPECIALISTS, THE ORCHESTRATOR"
+    pack_title: "REFERENCE PACK"
+    pack_intro: "The same material the four specialists would hold for this client. Open a section to read it."
+    placeholder: "Message the team, or use @ for one teammate or the orchestrator…"
+    send: "Send"
+    fold_footer: "The orchestrator's exchanges with the specialists sit folded in the chat, one block per round. Open a block any time to read it."
+    unknown_mention: "No teammate called \"{name}\". Try {options}."
+    agent_failed: "{name} did not respond."
+    header_task: "Task"
+    task_of: "Task {n} of {total}"
+    seventh_label: "Task 7 of 7 · alone"
+    card_header: "YOUR CARD"
+    card_header_noai: "YOUR CARD"
+    card_empty: "(nothing yet)"
+    typed_share: "Typed by you: {share}% (minimum {min}%)"
+    submit_blocked_share: "Write at least {min}% of the card yourself to submit."
+    to_submission: "Go to submission"
+    keep: "Keep"
+    cut: "Cut"
+    send_back: "Send back"
+    reason_prompt: "Why are you sending this back? A brief reason is required."
+    reason_ok: "Send back"
+    reason_cancel: "Cancel"
+    written_by: "WRITTEN BY {name}"
+    insert: "Insert"
+    suggests: "{name} suggests:"
+    time_up: "Time is up. Moving to submission."
+  submit:
+    header: "Submission"
+    sub_header: "Task {n} of {total}, third of three pages"
+    sub_header_last: "Final task, third of three pages"
+    badge: "no time limit"
+    card_title: "CAMPAIGN RECOMMENDATION CARD"
+    before_title: "BEFORE YOU HAND IN"
+    fields_complete: "Card fields complete"
+    typed_share: "Typed by you"
+    counter_note: "The counter is shown to everyone and only blocks submission in the generative condition."
+    min_note: "At least {min}% of the card must be typed by you to submit."
+    empty_field: "Still empty."
+    still_empty: "{fields}: still empty."
+    button: "Hand in task {n}"
+    button_last: "Hand in and finish"
+    provenance_note: "Each card is stored separately, with span-by-span provenance."
+    status_kept: "KEPT"
+    status_cut: "CUT"
+    status_sent_back: "SENT BACK"
+    status_proposed: "FROM THE TEAM"
+    status_typed: "TYPED BY YOU"
+    from_label: "FROM {name}"
+    time_note: "Your time on the task page has ended."
+  checkin:
+    header: "Check-in"
+    title: "Before the next client"
+    intro: "Please answer every question. It takes under a minute."
+    button: "Continue"
+    button_next: "Continue to task {n}"
+    subtitle: "Shown after every client, before the next brief."
+    target: "target: 60–75 seconds"
+    missing: "Please answer every question."
+    options_label: "Options"
+    items:
+      - id: ci1
+        text: "How much mental effort did that task take?"
+        type: scale
+        scale_min: 1
+        scale_max: 9
+        low: "very very low"
+        high: "very very high"
+      - id: ci2
+        text: "If the next client had a licensing question, who would you go to first?"
+        type: specialists
+        extra_options: ["Not sure"]
+      - id: ci3
+        text: "How confident are you that the card you just handed in breaks none of the client's constraints?"
+        type: choice
+        options: ["Not at all", "Slightly", "Moderately", "Very", "Completely"]
+      - id: ci4
+        text: "Of the thinking behind that card, how much was yours rather than the team's?"
+        type: choice
+        options: ["0%", "25%", "50%", "75%", "100%"]
+      - id: ci5
+        text: "Why did the orchestrator give you this panel?"
+        type: choice
+        options: ["Status only", "Status and what was wrong", "Status, what was wrong, and why"]
+        ai_only: true
+  break:
+    header: "Break"
+    title: "Take a short break"
+    body: "You have finished three clients. Rest for a moment. The next task starts when the timer ends or when you press the button."
+    remaining: "Break ends in"
+    end_early: "End break early"
+  exit:
+    header: "Done"
+    title: "Thank you"
+    body: "You have completed all seven clients. Your completion code is shown below. You are now being returned to the survey. If nothing happens, copy the code into the survey."
+    body_standalone: "Standalone test mode: nothing is redirected. This is the completion code that would be sent to Qualtrics."
+    code_label: "Completion code"
+    continue_link: "Return to the survey"
+    abandoned_title: "Session ended"
+    abandoned_body: "This session ended because there was no activity for too long. The link cannot be used again."
+  entry_launcher:
+    title: "Interaction Portal: standalone test launcher"
+    intro: "Standalone test mode is on, so no Qualtrics link is needed. Choose a condition and start a session. In production this page is replaced by the entry link with ?pid=...&condition=..."
+    pid_label: "Participant ID (blank = generate)"
+    condition_label: "Condition"
+    start: "Start session"
+
+# Qualtrics return
+qualtrics:
+  exit_survey_url: "https://example.qualtrics.com/jfe/form/SV_demo"
+  completion_code_prefix: "IP2"
+  completion_code_secret: "change-me-too"
+
+# ---------------------------------------------------------------------------
+# Practice (scripted, no model calls). Steps are shown per role / condition type.
+# ---------------------------------------------------------------------------
+practice:
+  scripted_replies:
+    team_broadcast: ["Nia: I can help with who the client wants to reach.", "Theo: Happy to help with the creative side."]
+    mention: "Theo: Yes, I hold the asset library. In this practice there is nothing to look up."
+    orchestrator: "Orchestrator: I assign work among the specialists. I hold no client material myself."
+  panel_text:
+    coordination: "Team status: Nia and Theo have each replied to your practice message. Rhys and Mira have not been asked anything yet."
+    task_focused: "Team status: Nia and Theo have each replied to your practice message. Rhys and Mira have not been asked. On the card: no practice field has been filled in yet, so nothing can be checked against the brief."
+    developmental: "Team status: Nia and Theo have replied to your practice message. On the card: no practice field has been filled in yet. Why it recurs: a draft built only from the public brief tends to miss what only a specialist holds, so unasked specialists matter."
+  # Exercise 3/4 practice card (AI conditions). Role changes how it is used.
+  card:
+    - { author: "Nia", text: "Practice audience: people who already buy similar made-up products." }
+    - { author: "Theo", text: "Practice concept: a short before-and-after sequence for a made-up product." }
+    - { author: "Mira", text: "Practice constraint: the platform allows 90 characters on this format." }
+  # Made-up reference pack for the no-AI practice (never uses real client material).
+  noai_pack:
+    - { title: "Client notes", text: "Practice client: a small bakery planning a spring promotion. Nothing here counts towards any task." }
+    - { title: "Creative and brand", text: "Warm, plain wording. Photos of the products, no stock images." }
+    - { title: "Compliance", text: "Practice rule: do not describe any product as the best in the country." }
+    - { title: "Production", text: "Practice rule: the platform allows 90 characters on this format." }
+  role_check:
+    question: "On this team, what is your role?"
+    options:
+      - { id: passive, text: "I follow the team's work and hand in the card it produces." }
+      - { id: evaluative, text: "I decide what goes on the card: keep, cut or send back." }
+      - { id: generative, text: "I write the card myself, with the team's help." }
+    # correct answer is the participant's own role
+  steps_ai:
+    - id: ex1_broadcast
+      exercise: 1
+      title: "Message the whole team"
+      instruction: "Type a message with no @ and send it. Everyone in the team sees it."
+      kind: chat_broadcast
+    - id: ex1_mention
+      exercise: 1
+      title: "Message specialist Theo with @"
+      instruction: "Now type @Theo and a short question. Only that teammate will answer."
+      kind: chat_mention
+    - id: ex2_panel
+      exercise: 2
+      title: "Read the orchestrator panel"
+      instruction: "Read the panel on the right. It reports on the team; it never takes input."
+      kind: panel_read
+    - id: ex2_orchestrator
+      exercise: 2
+      title: "Ask the orchestrator something"
+      instruction: "Type @Orchestrator and a short question in the chat."
+      kind: chat_orchestrator
+    - id: ex3_role
+      exercise: 3
+      title: "Practise your own role"
+      kind: role_action
+    - id: ex4_submit
+      exercise: 4
+      title: "Submit the practice card and answer one question"
+      instruction: "Hand in the practice card, then answer the check question."
+      kind: submit_and_check
+  role_step_instruction:
+    passive: "Read the practice card, then press Done. Passive participants read and press submit."
+    evaluative: "Keep one part, cut one part, send one part back. Evaluative participants use the three controls."
+    generative: "Write one sentence of your own in the box before continuing. Generative participants have to write."
+  steps_noai:
+    - id: noai_pack
+      exercise: 1
+      title: "Open a pack section"
+      instruction: "Open one section of the reference pack."
+      kind: pack_open
+    - id: noai_card
+      exercise: 2
+      title: "Write a card field"
+      instruction: "Write at least one sentence in the practice card field."
+      kind: card_write
+  practice_pack:
+    - { title: "Practice section", text: "This is a practice section. The real packs hold client material." }
+  generative_min_chars: 20
+
+# ---------------------------------------------------------------------------
+# Autopilot (Harness B) driver
+# ---------------------------------------------------------------------------
+autopilot:
+  broadcast_questions:
+    - "What does this client want to achieve with the campaign?"
+    - "What should the creative direction be for this client?"
+  mention_questions:
+    Nia: "@Nia What does the client care about most beyond the brief?"
+    Theo: "@Theo Which assets and brand rules do we need to respect?"
+    Rhys: "@Rhys Are there any claims we cannot make for this client?"
+    Mira: "@Mira What production limits does the plan have to fit?"
+  typed_text: "My own recommendation, written for this client and respecting what the team told me."

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block header_left %}<b>{{ t('checkin.header') }}</b><span class="sep">—</span>after every task{% endblock %}
+{% block header_right %}<span class="pill">{{ t('checkin.target') }}</span>{% endblock %}
+{% block body %}
+<div class="content narrow">
+  <h1>{{ t('checkin.title') }}</h1>
+  <p class="muted">{{ t('checkin.subtitle') }}</p>
+  <form id="checkin-form">
+    {% for it in items %}
+    <div class="q" data-item="{{ it.id }}">
+      <div class="qt"><span class="qn">{{ loop.index }}</span>{{ it.text }}</div>
+      {% if it.type == 'scale' %}
+        <div class="scale">
+          {% for v in range(it.scale_min, it.scale_max + 1) %}
+          <label><input type="radio" name="{{ it.id }}" value="{{ v }}"><span>{{ v }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="scale-ends"><span>{{ it.low }}</span><span>{{ it.high }}</span></div>
+      {% else %}
+        <div class="opts">
+          {% for o in it.options %}<label><input type="radio" name="{{ it.id }}" value="{{ o }}">{{ o }}</label>{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p class="err" id="checkin-err"></p>
+    <p><button class="btn primary" type="submit" id="checkin-btn">{{ t('checkin.button_next', n=n + 1) if n != cfg.break_after_position else t('checkin.button') }}</button></p>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/checkin.js"></script>{% endblock %}

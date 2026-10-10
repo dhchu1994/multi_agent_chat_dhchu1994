@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block header_left %}<b>{{ t('break.header') }}</b>{% endblock %}
+{% block header_right %}<span class="pill">{{ t('break.remaining') }}</span>{% endblock %}
+{% block body %}
+<div class="content center">
+  <h1>{{ t('break.title') }}</h1>
+  <p>{{ t('break.body') }}</p>
+  <div class="bigtimer" data-countdown="{{ break_remaining }}" data-fmt="{time}" data-zero="reload" data-sync="break_remaining"></div>
+  <button class="btn primary" id="end-break">{{ t('break.end_early') }}</button>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById('end-break').addEventListener('click', async () => {
+    const r = await Portal.post('/api/break/end', {});
+    if (r.ok) location.reload();
+  });
+</script>
+{% endblock %}

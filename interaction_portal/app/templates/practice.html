@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import editor_texts %}
+{% set telemetry = true %}
+{% block shell_class %}wide{% endblock %}
+{% block header_left %}<b>{{ t('practice.header') }}</b><span class="sep">·</span><span id="pr-header">exercise 1 of {{ 4 if cond.ai else 2 }}</span>{% endblock %}
+{% block header_right %}<span class="pill" id="pr-badge">{{ t('practice.badge') }}</span>{% endblock %}
+{% block body %}
+<div class="cols cols-practice" id="pr-cols" style="min-height:520px">
+  <div class="col" id="pr-left">
+    <div class="col-title">{{ t('practice.todo_title') }}</div>
+    <h2 id="pr-title"></h2>
+    <p class="instruction" id="pr-instruction"></p>
+    <div class="flash hidden" id="pr-flash"></div>
+    <ul class="step-list" id="pr-steps"></ul>
+    <p><button class="btn primary hidden" id="pr-next"></button></p>
+    <p class="hint">{{ t('practice.note') }}</p>
+  </div>
+
+  <div class="col flexcol" id="pr-mid">
+    <!-- chat pane (AI, exercises 1-2) -->
+    <div class="chat-wrap hidden" id="pane-chat">
+      <div class="col-title">{{ t('practice.chat_title') }}</div>
+      <div class="chat-log" id="pr-chat-log"></div>
+      <div class="chat-input">
+        <div id="mention-pop" class="mention-pop hidden"></div>
+        <div class="row">
+          <textarea id="chat-text" rows="1" maxlength="500" placeholder="{{ t('task.placeholder') }}"></textarea>
+          <button class="btn primary" id="chat-send">{{ t('task.send') }}</button>
+        </div>
+        <div class="chat-warn" id="chat-warn"></div>
+      </div>
+    </div>
+    <!-- card pane (exercise 3) -->
+    <div class="hidden" id="pane-card">
+      <div class="col-title">{{ t('practice.card_title') }}</div>
+      <div id="card-editor"></div>
+    </div>
+    <!-- hand-in pane (exercise 4) -->
+    <div class="hidden" id="pane-handin">
+      <h1>{{ t('practice.hand_in_title') }}</h1>
+      <p>{{ t('practice.hand_in_intro') }}</p>
+      <div class="col-title">{{ t('practice.card_title') }}</div>
+      <div id="handin-summary"></div>
+      <p><button class="btn primary" id="pr-submit-card">{{ t('practice.submit_practice') }}</button></p>
+      <div class="role-check hidden" id="role-check">
+        <h2>{{ role_check.question }}</h2>
+        {% for o in role_check.options %}
+        <label class="opt"><input type="radio" name="rc" value="{{ o.id }}">{{ o.text }}</label>
+        {% endfor %}
+        <p class="err" id="rc-err"></p>
+        <p><button class="btn primary" id="rc-submit">{{ t('practice.finish_button') }}</button></p>
+      </div>
+    </div>
+    <!-- pack pane (no-AI practice) -->
+    <div class="hidden" id="pane-pack">
+      <div class="col-title">{{ t('task.pack_title') }}</div>
+      {% for sec in noai_pack %}
+      <div class="acc" data-section="{{ sec.title }}">
+        <button class="acc-head" type="button"><span>{{ sec.title }}</span><span class="toggle">{{ t('task.open') }}</span></button>
+        <div class="acc-body hidden">{{ sec.html|safe }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col panel-col hidden" id="pr-right">
+    <div class="col-title">{{ t('practice.panel_title') }}</div>
+    <div class="panel-text" id="panel-text"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/card_editor.js"></script>
+<script>
+  window.PRACTICE = {
+    state: {{ practice|tojson }}, steps: {{ steps|tojson }}, ai: {{ 'true' if cond.ai else 'false' }},
+    role: {{ cond.role|tojson }}, texts: {{ editor_texts() }},
+    titles: {{ t('practice.exercise_titles' if cond.ai else 'practice.exercise_titles_noai')|tojson }},
+    roleInstruction: {{ cfg.practice.role_step_instruction|tojson }},
+    agentNames: {{ cfg.all_agent_names|tojson }},
+    ui: {
+      next: {{ t('practice.next_step')|tojson }}, done: {{ t('practice.done_button')|tojson }}, finish: {{ t('practice.finish_button')|tojson }},
+      badge: {{ t('practice.badge')|tojson }}, badgeCheck: {{ t('practice.badge_check')|tojson }},
+      exercise: "exercise {n} of {total}", you: "You", roleWrong: {{ t('practice.role_check_wrong')|tojson }},
+      pickOne: "Choose one answer.", submittedPrompt: "Now answer the check question."
+    }
+  };
+</script>
+<script src="/static/js/chat.js"></script>
+<script src="/static/js/practice.js"></script>
+{% endblock %}

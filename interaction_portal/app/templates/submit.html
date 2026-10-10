@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import editor_texts %}
+{% block shell_class %}wide{% endblock %}
+{% block header_left %}<b>{{ t('submit.header') }}</b><span class="sep">·</span>{{ t('submit.sub_header_last') if last else t('submit.sub_header', n=n, total=total) }}{% endblock %}
+{% block header_right %}<span class="pill">{{ t('submit.badge') }}</span>{% endblock %}
+{% block body %}
+<div class="cols cols-submit" style="min-height:420px">
+  <div class="col">
+    <div class="col-title">{{ t('submit.card_title') }}</div>
+    <div id="card-editor"></div>
+    <p class="hint" id="empty-note"></p>
+  </div>
+  <div class="col">
+    <div class="col-title">{{ t('submit.before_title') }}</div>
+    <table class="status-table">
+      <tr><td>{{ t('submit.fields_complete') }}</td><td><span class="badge" id="fields-badge">0/{{ card_fields|length }}</span></td></tr>
+      <tr><td>{{ t('submit.typed_share') }}</td><td><span class="badge" id="share-badge">0%</span></td></tr>
+    </table>
+    <p class="hint">{{ t('submit.counter_note') }}</p>
+    {% if role == 'generative' %}<p class="hint">{{ t('submit.min_note', min=(cfg.editor.min_typed_share * 100)|int) }}</p>{% endif %}
+    <p class="err" id="submit-err"></p>
+    <p><button class="btn primary" id="hand-in">{{ t('submit.button_last') if last else t('submit.button', n=n) }}</button></p>
+    <p class="hint">{{ t('submit.provenance_note') }}</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/card_editor.js"></script>
+<script>
+  window.SUBMIT = {
+    role: {{ role|tojson }}, card: {{ card|tojson }}, fields: {{ fields_json|tojson }},
+    texts: {{ editor_texts() }}, total: {{ card_fields|length }}, minShare: {{ cfg.editor.min_typed_share }},
+    stillEmpty: {{ t('submit.still_empty', fields='{fields}')|tojson }}
+  };
+</script>
+<script src="/static/js/submit.js"></script>
+{% endblock %}

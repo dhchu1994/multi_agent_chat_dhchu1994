@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import unlock_pill %}
+{% block header_left %}<b>{{ t('role.header') }}</b><span class="sep">·</span><span class="muted">{{ t('role.header_note') }}</span>{% endblock %}
+{% block header_right %}{{ unlock_pill(unlock) }}{% endblock %}
+{% block body %}
+<div class="content">
+  <h1>{{ t('role.title') }}</h1>
+  {% if role_message %}<div class="role-fail">{{ t('practice.role_check_wrong') }}</div>{% endif %}
+  <p>{{ t('role.intro') }}</p>
+  <div class="role-box">
+    <span class="avatar">{{ role_cfg.initial }}</span>
+    <div><div class="rt">{{ t('role.version_label', role=role_cfg.label) }}</div><div>{{ role_cfg.body }}</div></div>
+  </div>
+  <table class="plain">
+    <thead><tr><th>{{ t('role.table_headers')[0] }}</th><th>{{ t('role.table_headers')[1] }}</th><th>{{ t('role.allows_label') }}</th></tr></thead>
+    <tbody><tr><td>{{ role_cfg.label }}</td><td>{{ role_cfg.one_line }}</td><td>{{ role_cfg.allows }}</td></tr></tbody>
+  </table>
+  <p class="footnote">{{ t('role.footer') }}</p>
+  <p><button id="continue-btn" class="btn" data-continue {{ 'disabled' if unlock > 0 }}>{{ t('common.continue') }}</button></p>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import unlock_pill %}
+{% block header_left %}<b>Orientation</b>{% endblock %}
+{% block header_right %}{{ unlock_pill(unlock) }}{% endblock %}
+{% block body %}
+<div class="content">
+  <h1>{{ t('orientation.title') }}</h1>
+  <p>{{ t('orientation.intro_ai') if cond.ai else t('orientation.intro_noai') }}</p>
+  {% set rows = t('orientation.rows_ai') if cond.ai else t('orientation.rows_noai') %}
+  {% set heads = t('orientation.table_headers') %}
+  <table class="plain">
+    <thead><tr><th>{{ heads[0] }}</th><th>{{ heads[1] }}</th></tr></thead>
+    <tbody>{% for r in rows %}<tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if cond.ai %}<p><b>{{ t('orientation.notes_title_ai') }}</b> {{ t('orientation.notes_ai') }}</p>{% endif %}
+  <p><b>{{ t('orientation.privacy_title') }}</b> {{ t('orientation.privacy') }}</p>
+  <p><button id="continue-btn" class="btn" data-continue {{ 'disabled' if unlock > 0 }}>{{ t('common.continue') }}</button></p>
+</div>
+{% endblock %}

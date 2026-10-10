@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/css/portal.css">
+</head>
+<body class="page-{{ page|default('entry') }}"
+      data-pid="{{ pid|default('') }}" data-page="{{ page|default('') }}"
+      data-min-viewport="{{ min_viewport|default(0) }}" data-allow-mobile="{{ 'true' if allow_mobile else 'false' }}"
+      data-telemetry="{{ 'true' if telemetry|default(false) else 'false' }}">
+<div class="shell {% block shell_class %}{% endblock %}">
+  <div class="topbar">
+    <div class="left">{% block header_left %}{% endblock %}</div>
+    <div class="right">{% block header_right %}{% endblock %}</div>
+  </div>
+  {% block body %}{% endblock %}
+</div>
+<div id="viewport-block" class="hidden shell"><div class="content center"><p id="viewport-msg"></p></div></div>
+<script src="/static/js/portal.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

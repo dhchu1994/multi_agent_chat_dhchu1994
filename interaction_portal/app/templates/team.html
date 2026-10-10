@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block header_left %}<b>{{ t('team.header') }}</b>{% endblock %}
+{% block header_right %}<span class="pill">{{ t('team.header_badge') }}</span>{% endblock %}
+{% block body %}
+<div class="content">
+  <h1>{{ t('team.title') }}</h1>
+  <p>{{ t('team.intro') }}</p>
+  <div class="team-grid">
+    {% for s in specialists %}
+    <div class="person">
+      <span class="avatar">{{ s.initial }}</span>
+      <div class="name">{{ s.name }}</div>
+      <div class="label">{{ s.role_label }}</div>
+      <div class="desc">{{ s.team_description }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="orch-box">
+    <span class="avatar">{{ orchestrator.name[0] }}</span>
+    <div><div class="name"><b>{{ t('team.orchestrator_title') }}</b></div><div>{{ orch_description }}</div></div>
+  </div>
+  <p class="footnote" style="margin-top:6px">{{ t('team.footer') }}</p>
+  <p><button id="continue-btn" class="btn primary" data-continue>{{ t('common.continue') }}</button></p>
+</div>
+{% endblock %}

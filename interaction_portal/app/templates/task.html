@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field_list, editor_texts %}
+{% set telemetry = true %}
+{% block shell_class %}wide full{% endblock %}
+{% block header_left %}
+  {% if mode == 'alone' %}<b>{{ t('task.alone_title') }}</b>
+  {% else %}<b>{{ t('task.header_task') }} page</b><span class="sep">·</span>{{ t('task.task_of', n=n, total=total) if not last else 'Final task' }}<span class="sep">—</span>{{ client.name }}{% endif %}
+{% endblock %}
+{% block header_right %}<span class="pill timer" id="task-timer" data-countdown="{{ task_remaining }}" data-fmt="{time} {{ t('common.time_remaining') }}" data-zero="reload" data-sync="task_remaining" data-low="60"></span>{% endblock %}
+{% block body %}
+<div class="cols {{ 'cols-alone' if mode == 'alone' else ('cols-pack' if mode == 'pack' else 'cols-task') }}">
+
+  <!-- left: client, card checklist, role -->
+  <div class="col">
+    <div class="col-title">{{ t('task.left_title_task') if mode == 'alone' else t('task.left_title_client') }}</div>
+    <p class="left-summary">{{ client.summary }}</p>
+    <div class="col-title spaced">{{ t('task.left_title_card') }}</div>
+    {{ field_list(card_fields) }}
+    {% if mode == 'team' %}<p class="hint">{{ t('task.left_hint_ai') }}</p>
+    {% elif mode == 'pack' %}<p class="hint">{{ t('task.left_hint_noai') }}</p>{% endif %}
+    {% if mode == 'team' %}
+      <div class="role-reminder"><div class="col-title">{{ t('task.role_title') }}</div>{{ role_cfg.reminder }}</div>
+    {% elif mode == 'alone' %}
+      <div class="alone-note"><b>{{ t('task.alone_note_title') }}</b> {{ t('task.alone_note') }}</div>
+    {% elif not cond.ai %}
+      <div class="alone-note">{{ t('task.noai_note') }}</div>
+    {% endif %}
+    {% if mode != 'alone' %}<p style="margin-top:18px"><button class="btn small" id="to-submission">{{ t('task.to_submission') }}</button></p>{% endif %}
+  </div>
+
+  <!-- middle: chat or reference pack -->
+  {% if mode == 'team' %}
+  <div class="col flexcol">
+    <div class="col-title">{{ t('task.chat_title') }}</div>
+    <div class="chat-wrap">
+      <div class="chat-log" id="chat-log" data-scroll-sample></div>
+      <div class="typing" id="chat-typing"></div>
+      <div class="chat-input">
+        <div id="mention-pop" class="mention-pop hidden"></div>
+        <div class="row">
+          <textarea id="chat-text" rows="1" maxlength="2000" placeholder="{{ t('task.placeholder') }}"></textarea>
+          <button class="btn primary" id="chat-send">{{ t('task.send') }}</button>
+        </div>
+        <div class="chat-warn" id="chat-warn"></div>
+        <div class="chat-note">{{ t('task.fold_footer') }}</div>
+      </div>
+    </div>
+  </div>
+  {% elif mode == 'pack' %}
+  <div class="col" data-scroll-sample id="pack-col">
+    <div class="col-title">{{ t('task.pack_label', name=client.name) }}</div>
+    {% for sec in pack %}
+    <div class="acc" data-section="{{ sec.title }}">
+      <button class="acc-head" type="button"><span>{{ sec.title }}</span><span class="toggle">{{ t('task.open') }}</span></button>
+      <div class="acc-body hidden">{{ sec.html|safe }}</div>
+    </div>
+    {% endfor %}
+    <p class="footnote">{{ t('task.pack_footer') }}</p>
+  </div>
+  {% endif %}
+
+  <!-- right: panel + card, or deliverable -->
+  <div class="col {{ 'panel-col' if mode == 'team' else '' }}">
+    {% if mode == 'team' %}
+      {% if panel_on %}
+      <div class="col-title">{{ t('practice.panel_title') }}</div>
+      <div class="panel-text" id="panel-text"><span class="panel-empty">…</span></div>
+      <div class="col-title spaced">{{ t('task.card_header') }}</div>
+      {% else %}
+      <div class="col-title">{{ t('task.card_header') }}</div>
+      {% endif %}
+    {% elif mode == 'pack' %}
+      <div class="col-title">{{ t('task.card_header_noai') }}</div>
+    {% else %}
+      <div class="col-title">{{ t('task.deliverable_title') }}</div>
+    {% endif %}
+    <div id="card-editor"></div>
+    <div class="share-line" id="share-line"></div>
+    {% if mode == 'alone' %}
+      <p class="err" id="submit-err"></p>
+      <p><button class="btn primary" id="hand-in">{{ t('task.hand_in_finish') }}</button></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/card_editor.js"></script>
+<script>
+  window.TASK = {
+    mode: {{ mode|tojson }}, role: {{ role|tojson }}, card: {{ card|tojson }},
+    fields: {{ card_fields|map(attribute='id')|list|tojson }},
+    fieldMeta: {{ fields_json|tojson }},
+    agents: {{ agents_json|tojson }},
+    orchestrator: {{ orchestrator.name|tojson }}, orchestratorRole: {{ orchestrator.role_label|tojson }},
+    agentNames: {{ agent_names|tojson }}, sections: {{ panel_sections|tojson }},
+    typingDelay: {{ typing_delay }}, panelOn: {{ 'true' if panel_on else 'false' }},
+    texts: {{ editor_texts() }}, last: {{ 'true' if last else 'false' }},
+    minShare: {{ cfg.editor.min_typed_share }}
+  };
+</script>
+<script src="/static/js/chat.js"></script>
+<script src="/static/js/task.js"></script>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% macro unlock_pill(seconds, btn="continue-btn") -%}
+{%- if seconds > 0 -%}
+<span class="pill timer" data-countdown="{{ seconds }}" data-fmt="{{ t('common.unlocks_in', seconds='{time}') }}" data-zero="enable:#{{ btn }}"></span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro avatar(letter) -%}<span class="avatar">{{ letter }}</span>{%- endmacro %}
+
+{% macro field_list(fields) -%}
+<ul class="field-list" id="field-list">
+  {% for f in fields %}<li data-field="{{ f.id }}"><span class="box"></span><span>{{ f.label }}</span></li>{% endfor %}
+</ul>
+{%- endmacro %}
+
+{% macro editor_texts() -%}
+{{ {
+  "keep": t('task.keep'), "cut": t('task.cut'), "send_back": t('task.send_back'),
+  "written_by": t('practice.written_by', name='{name}'), "from": t('submit.from_label', name='{name}'),
+  "empty": t('task.card_empty'), "write_here": t('task.write_here'),
+  "typed_share": t('task.typed_share', share='{share}', min='{min}'),
+  "reason": "Why are you sending this back?", "ok": "OK", "cancel": "Cancel", "insert": "Insert",
+  "suggests": "{name} suggests",
+  "status": {"kept": t('submit.status_kept'), "cut": t('submit.status_cut'), "sent_back": t('submit.status_sent_back'),
+             "proposed": t('submit.status_proposed'), "typed": t('submit.status_typed'), "inserted": t('submit.status_typed')}
+}|tojson }}
+{%- endmacro %}

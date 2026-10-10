@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block header_left %}<b>{{ t('entry_launcher.title') }}</b>{% endblock %}
+{% block header_right %}<span class="pill">standalone test mode</span>{% endblock %}
+{% block body %}
+<div class="content narrow launcher">
+  <h1>{{ t('entry_launcher.title') }}</h1>
+  <p>{{ t('entry_launcher.intro') }}</p>
+  <form method="get" action="/">
+    <label for="condition">{{ t('entry_launcher.condition_label') }}</label>
+    <select id="condition" name="condition">
+      {% for c in conditions %}<option value="{{ c.code }}">{{ c.code }} · {{ c.role }}{% if c.ai %} · panel: {{ c.panel_level }}{% else %} · no AI{% endif %}</option>{% endfor %}
+    </select>
+    <label for="pid">{{ t('entry_launcher.pid_label') }}</label>
+    <input id="pid" name="pid" autocomplete="off" pattern="[A-Za-z0-9_.\-]{1,64}">
+    <p style="margin-top:20px"><button class="btn primary" type="submit">{{ t('entry_launcher.start') }}</button></p>
+  </form>
+  <p class="footnote">Timers run at 1/{{ cfg.timer_scale|int if cfg.timer_scale >= 1 else cfg.timer_scale }} speed in this configuration (testing.timer_scale = {{ cfg.timer_scale }}). The LLM provider is "{{ cfg.llm.provider }}".</p>
+</div>
+{% endblock %}

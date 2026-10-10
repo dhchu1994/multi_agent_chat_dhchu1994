@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import unlock_pill %}
+{% set telemetry = true %}
+{% block header_left %}<b>{{ t('brief.header') }}</b><span class="sep">·</span>{{ t('brief.sub_header_last') if last else t('brief.sub_header', n=n, total=total) }}{% endblock %}
+{% block header_right %}{{ unlock_pill(unlock) }}{% endblock %}
+{% block body %}
+<div class="content">
+  <h1>{{ t('brief.title', name=client.name) }}</h1>
+  <p>{{ t('brief.intro_last') if last else (t('brief.intro_ai') if cond.ai else t('brief.intro_noai')) }}</p>
+  <p>{{ client.body }} {{ t('brief.stated_note') }}</p>
+  <ul class="req-list">
+    {% for r in client.requirements %}<li><span class="num">{{ loop.index }}</span><span>{{ r }}</span></li>{% endfor %}
+  </ul>
+  <p>{{ t('brief.card_text', fields=(card_fields|map(attribute='label')|map('lower')|join(', '))) }}</p>
+  <p><button id="continue-btn" class="btn primary" data-continue {{ 'disabled' if unlock > 0 }}>{{ t('brief.start') }}</button></p>
+</div>
+{% endblock %}
