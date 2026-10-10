@@ -168,6 +168,7 @@ class Session:
     team_order: List[str] = field(default_factory=list)  # Random order of specialists
     role_shown: bool = False
     practice_complete: bool = False
+    current_practice_step: int = 0
     
     # Client state
     clients: Dict[str, ClientState] = field(default_factory=dict)
@@ -383,6 +384,8 @@ class SimulationV2:
             }
         
         elif page_type == PageType.ORIENTATION:
+            if not self.session.orientation_timer:
+                self.session.start_orientation_timer()
             return {
                 "title": text_config.orientation.get("title", "Orientation"),
                 "content": text_config.orientation.get("content", ""),
@@ -425,6 +428,8 @@ class SimulationV2:
             }
         
         elif page_type == PageType.YOUR_ROLE:
+            if not self.session.role_timer:
+                self.session.start_role_timer()
             role_text = self._get_role_text()
             return {
                 "title": text_config.role.get("title", "Your Role"),
@@ -502,6 +507,7 @@ class SimulationV2:
             
             return {
                 "title": f"{text_config.task.get('title', 'Task Page')} - {config.clients[client_id].name}",
+                "brief": self._load_brief_text(client_id),
                 "role_reminder": role_reminder,
                 "team_chat_label": text_config.task.get("team_chat_label", "Team Chat"),
                 "panel_label": text_config.task.get("panel_label", "Orchestrator Panel"),
@@ -616,14 +622,11 @@ class SimulationV2:
         text_config = self.config.text
         role = self.condition.role
         
-        if role == "passive":
-            return text_config.task.role_reminder.get("passive", "")
-        elif role == "evaluative":
-            return text_config.task.role_reminder.get("evaluative", "")
-        elif role == "generative":
-            return text_config.task.role_reminder.get("generative", "")
-        else:
-            return ""
+        task_dict = text_config.task if isinstance(text_config.task, dict) else {}
+        role_reminder = task_dict.get("role_reminder", {})
+        if isinstance(role_reminder, dict):
+            return role_reminder.get(role, "")
+        return ""
     
     def _get_practice_content(self) -> Dict:
         """Get practice exercises content"""
@@ -662,7 +665,7 @@ class SimulationV2:
             "introduction": text_config.practice.get("introduction", ""),
             "exercises": exercises,
             "complete_message": text_config.practice.get("complete_message", ""),
-            "current_exercise": 0,
+            "current_exercise": getattr(self.session, "current_practice_step", 0),
             "practice_complete": self.session.practice_complete
         }
     
@@ -771,48 +774,45 @@ class SimulationV2:
         logger.info(f"Handling action: {action} on {page_type} with data: {data}")
         
         if page_type == PageType.ENTRY:
-            return self._handle_entry_action(action, data)
-        
+            result = self._handle_entry_action(action, data)
         elif page_type == PageType.ORIENTATION:
-            return self._handle_orientation_action(action, data)
-        
+            result = self._handle_orientation_action(action, data)
         elif page_type == PageType.MEET_TEAM:
-            return self._handle_meet_team_action(action, data)
-        
+            result = self._handle_meet_team_action(action, data)
         elif page_type == PageType.YOUR_ROLE:
-            return self._handle_role_action(action, data)
-        
+            result = self._handle_role_action(action, data)
         elif page_type == PageType.PRACTICE:
-            return self._handle_practice_action(action, data)
-        
+            result = self._handle_practice_action(action, data)
         elif page_type == PageType.CLIENT_BRIEF:
-            return self._handle_client_brief_action(action, data)
-        
+            result = self._handle_client_brief_action(action, data)
         elif page_type == PageType.TASK:
-            return self._handle_task_action(action, data)
-        
+            result = self._handle_task_action(action, data)
         elif page_type == PageType.SUBMISSION:
-            return self._handle_submission_action(action, data)
-        
+            result = self._handle_submission_action(action, data)
         elif page_type == PageType.CHECKIN:
-            return self._handle_checkin_action(action, data)
-        
+            result = self._handle_checkin_action(action, data)
         elif page_type == PageType.BREAK:
-            return self._handle_break_action(action, data)
-        
+            result = self._handle_break_action(action, data)
         elif page_type == PageType.SEVENTH_CLIENT:
-            return self._handle_seventh_client_action(action, data)
-        
+            result = self._handle_seventh_client_action(action, data)
         elif page_type == PageType.EXIT:
-            return self._handle_exit_action(action, data)
+            result = self._handle_exit_action(action, data)
+        else:
+            return {"success": False, "error": f"Unknown page type: {page_type}"}
         
-        return {"success": False, "error": f"Unknown action: {action}"}
+        if result.get("next_page"):
+            try:
+                self.session.current_page = PageType(result["next_page"])
+            except ValueError:
+                pass
+        
+        return result
     
     def _handle_entry_action(self, action: str, data: Dict) -> Dict:
         """Handle entry page actions"""
-        if action == "validate_link":
+        if action in ("validate_link", "continue"):
             # Link validation happens during entry
-            return {"valid": True, "condition": self.condition_code}
+            return {"success": True, "valid": True, "condition": self.condition_code, "next_page": PageType.ORIENTATION.value}
         return {"success": False, "error": "Invalid action"}
     
     def _handle_orientation_action(self, action: str, data: Dict) -> Dict:
@@ -832,7 +832,11 @@ class SimulationV2:
             }
         elif action == "reading_complete":
             self.session.mark_orientation_read()
-            return {"success": True}
+            return {"success": True, "can_continue": True}
+        elif action == "timer_check":
+            can_continue = self.session.can_continue_from_orientation()
+            timer_remaining = self.session.orientation_timer.get_remaining_formatted() if self.session.orientation_timer else "00:00"
+            return {"success": True, "expired": can_continue, "can_continue": can_continue, "timer": timer_remaining}
         
         return {"success": False, "error": "Invalid action"}
     
@@ -873,7 +877,11 @@ class SimulationV2:
             }
         elif action == "reading_complete":
             self.session.mark_role_shown()
-            return {"success": True}
+            return {"success": True, "can_continue": True}
+        elif action == "timer_check":
+            can_continue = self.session.can_continue_from_role()
+            timer_remaining = self.session.role_timer.get_remaining_formatted() if self.session.role_timer else "00:00"
+            return {"success": True, "expired": can_continue, "can_continue": can_continue, "timer": timer_remaining}
         
         return {"success": False, "error": "Invalid action"}
     
@@ -881,6 +889,7 @@ class SimulationV2:
         """Handle practice page actions"""
         if action == "complete_exercise":
             exercise_id = data.get("exercise_id")
+            self.session.current_practice_step += 1
             
             # Log practice step
             self.logger.log_practice_step(
@@ -891,7 +900,7 @@ class SimulationV2:
             )
             
             # Check if this is the last exercise
-            if exercise_id == "exercise_4":
+            if exercise_id == "exercise_4" or self.session.current_practice_step >= 4:
                 # Handle role check
                 answer = data.get("answer", "")
                 correct_answer = self._get_correct_answer()
@@ -904,16 +913,12 @@ class SimulationV2:
                     sent_back=False
                 )
                 
-                if not correct:
-                    # In production, might send back to role page
-                    # For now, just continue
-                    pass
-                
                 self.session.mark_practice_complete()
             
-            return {"success": True}
+            return {"success": True, "practice_complete": self.session.practice_complete}
         
-        elif action == "practice_complete":
+        elif action in ("practice_complete", "continue"):
+            self.session.mark_practice_complete()
             self.session.update_last_activity()
             
             # Log page leave
@@ -1025,6 +1030,7 @@ class SimulationV2:
                 field_id=field,
                 span_id=span_id,
                 reason=reason,
+                text=data.get("text", ""),
                 author="participant"
             )
             
@@ -1053,7 +1059,7 @@ class SimulationV2:
                 
                 if client_state.task_timer.is_expired():
                     self.logger.log_timer_expired(self.pid, client_id, "task")
-                    return {"success": True, "expired": True, "timer": timer_remaining}
+                    return {"success": True, "expired": True, "timer": timer_remaining, "next_page": PageType.SUBMISSION.value}
             
             return {"success": True, "expired": False, "timer": timer_remaining}
         
@@ -1078,7 +1084,8 @@ class SimulationV2:
         
         # If message has addressees, send to those agents only
         if message.addressees:
-            for addressee in message.addressees:
+            for addressee_raw in message.addressees:
+                addressee = addressee_raw.lower()
                 if addressee == "orchestrator":
                     # Handle orchestrator message
                     orchestrator = AgentFactory.get_agent("orchestrator")
@@ -1196,7 +1203,7 @@ class SimulationV2:
         if not client_state or not client_id:
             return {"success": False, "error": "No current client"}
         
-        if action == "submit":
+        if action in ("submit", "confirm_submission"):
             # Submit card
             result = self.card_editor.submit_card()
             
@@ -1251,16 +1258,18 @@ class SimulationV2:
         if not client_state or not client_id:
             return {"success": False, "error": "No current client"}
         
-        if action == "submit_answers":
-            answers = data.get("answers", {})
+        if action in ("submit_answers", "submit_checkin"):
+            answers = data.get("answers") or data.get("responses") or {}
             
             # Log each check-in answer
             for item_id, answer_data in answers.items():
+                val = answer_data.get("value", "") if isinstance(answer_data, dict) else str(answer_data)
+                ms = answer_data.get("time", 0) if isinstance(answer_data, dict) else 0
                 self.logger.log_checkin_answer(
                     pid=self.pid,
                     item_id=item_id,
-                    value=answer_data.get("value", ""),
-                    milliseconds_to_answer=answer_data.get("time", 0),
+                    value=val,
+                    milliseconds_to_answer=ms,
                     client=client_id,
                     page="checkin"
                 )
@@ -1272,8 +1281,8 @@ class SimulationV2:
             # Log page leave
             self.logger.log_page_leave(self.pid, "checkin")
             
-            # Check if we need to go to break or next client
-            if self.session.is_break_time() and not self.session.break_after_client_3:
+            # Check if we need to go to break after client 3 (index 2)
+            if self.session.current_client_index == 2 and not self.session.break_after_client_3:
                 # Start break after client 3
                 self.session.break_after_client_3 = True
                 self.session.start_break_timer()
@@ -1288,6 +1297,7 @@ class SimulationV2:
             else:
                 # Advance to next client
                 self.session.advance_to_next_client()
+                self.card_editor = CardEditor(self.condition)
                 
                 # Check if this is the 7th client (last one)
                 if self.session.current_client_index >= len(self.session.client_order) - 1:
@@ -1307,8 +1317,8 @@ class SimulationV2:
     
     def _handle_break_action(self, action: str, data: Dict) -> Dict:
         """Handle break page actions"""
-        if action == "end_break":
-            ended_early = True
+        if action in ("end_break", "continue"):
+            ended_early = data.get("ended_early", True)
             
             # Log break end
             self.logger.log_break_end(self.pid, ended_early, None, "break")
@@ -1320,6 +1330,7 @@ class SimulationV2:
             
             # Continue to next client
             self.session.advance_to_next_client()
+            self.card_editor = CardEditor(self.condition)
             
             return {
                 "success": True,
@@ -1332,6 +1343,7 @@ class SimulationV2:
                     # Break ended naturally
                     self.logger.log_break_end(self.pid, False, None, "break")
                     self.session.advance_to_next_client()
+                    self.card_editor = CardEditor(self.condition)
                     return {
                         "success": True,
                         "expired": True,
@@ -1383,6 +1395,7 @@ class SimulationV2:
                 field_id=data.get("field"),
                 span_id=data.get("span_id"),
                 reason=data.get("reason", ""),
+                text=data.get("text", ""),
                 author="participant"
             )
             
@@ -1437,7 +1450,7 @@ class SimulationV2:
     
     def _handle_exit_action(self, action: str, data: Dict) -> Dict:
         """Handle exit page actions"""
-        if action == "complete":
+        if action in ("complete", "continue"):
             # End session
             completion_code = self._generate_completion_code()
             

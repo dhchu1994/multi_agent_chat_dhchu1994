@@ -91,6 +91,8 @@ class Card:
     def __init__(self, field_ids: List[str]):
         self.fields = {fid: CardField(field_id=fid, content="", author="") for fid in field_ids}
         self.field_ids = field_ids
+        self.typed_share = ""
+        self.typed_share_author = ""
     
     def get_full_card(self) -> Dict:
         """Get full card with provenance"""
@@ -153,7 +155,7 @@ class Agent:
         client_config = config.get_client(client_id)
         
         # Load private material for this client
-        if client_id in client_config.private_material:
+        if client_config.private_material:
             self.private_material = {}
             for agent_name, file_path in client_config.private_material.items():
                 try:
@@ -629,7 +631,10 @@ class PanelGenerator:
         card_status = kwargs.get('card_status', {})
         
         # Count completed fields
-        completed = sum(1 for fid, field in card_status.items() if field.get('content', '').strip())
+        completed = sum(
+            1 for fid, field in card_status.items()
+            if (field.get('content', '') if isinstance(field, dict) else str(field)).strip()
+        )
         total = len(card_status)
         
         return f"""
@@ -700,7 +705,7 @@ Please continue working with the team through the chat.
         issues = []
         
         for fid, field in card_status.items():
-            content = field.get('content', '')
+            content = field.get('content', '') if isinstance(field, dict) else str(field)
             if not content.strip():
                 issues.append(f"- Field {fid} is empty")
             elif len(content.split()) < 5:
@@ -712,7 +717,10 @@ Please continue working with the team through the chat.
     
     def _get_developmental_principle(self, card_status: Dict) -> str:
         """Get developmental principle based on card status"""
-        completed = sum(1 for fid, field in card_status.items() if field.get('content', '').strip())
+        completed = sum(
+            1 for fid, field in card_status.items()
+            if (field.get('content', '') if isinstance(field, dict) else str(field)).strip()
+        )
         total = len(card_status)
         
         if completed < total // 2:

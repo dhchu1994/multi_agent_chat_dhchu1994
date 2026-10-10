@@ -76,10 +76,13 @@ class InteractionPortalV2:
         self.simulations[pid] = sim
         return sim
     
-    def _get_current_simulation(self) -> Optional[SimulationV2]:
-        """Get current simulation from state"""
-        if self.state["pid"] and self.state["pid"] in self.simulations:
-            return self.simulations[self.state["pid"]]
+    def _get_current_simulation(self, pid: Optional[str] = None) -> Optional[SimulationV2]:
+        """Get current simulation from state or pid"""
+        target_pid = pid or self.state.get("pid")
+        if target_pid and target_pid in self.simulations:
+            return self.simulations[target_pid]
+        if len(self.simulations) == 1:
+            return next(iter(self.simulations.values()))
         return None
     
     def _update_state(self, **kwargs):
@@ -147,7 +150,17 @@ class InteractionPortalV2:
         <div class="entry-page">
             <h1>Interaction Portal</h1>
             <p>Loading your session...</p>
+            <div style="margin-top: 25px;">
+                <button onclick="continueFromEntry()" class="continue-button">Enter Portal</button>
+            </div>
         </div>
+        
+        <script>
+        function continueFromEntry() {
+            handleAction('validate_link', {});
+        }
+        setTimeout(continueFromEntry, 600);
+        </script>
         """
         return html
     
@@ -162,28 +175,46 @@ class InteractionPortalV2:
             <div class="continue-section">
                 <p class="minimum-reading">{content.get('minimum_reading_message', '')}</p>
                 <button onclick="continueFromOrientation()" 
+                        id="orientation-continue-btn"
                         class="continue-button" 
                         {"disabled" if not content.get('can_continue', False) else ""}>
                     {content.get('continue_button', 'Continue')}
                 </button>
-                <span class="timer">Time remaining: {content.get('timer_remaining', '')}</span>
+                <span class="timer">Time remaining: <span id="orientation-timer">{content.get('timer_remaining', '')}</span></span>
+                <div style="margin-top: 10px;">
+                    <a href="javascript:void(0)" onclick="skipReadingTimer()" style="font-size: 12px; color: #95a5a6; text-decoration: underline;">(Skip reading timer for testing)</a>
+                </div>
             </div>
         </div>
         
         <script>
-        // Auto-continue when timer expires
         function checkOrientationTimer() {{
-            // This would be handled by the backend
-            // For demo, just enable continue after a delay
-            setTimeout(() => {{
-                document.querySelector('.continue-button').disabled = false;
-            }}, {self.config.session.minimum_reading_time_orientation * 1000});
+            handleAction('timer_check', {{}}, (response) => {{
+                if (response && response.timer) {{
+                    const el = document.getElementById('orientation-timer');
+                    if (el) el.textContent = response.timer;
+                }}
+                if (response && (response.expired || response.can_continue)) {{
+                    const btn = document.getElementById('orientation-continue-btn');
+                    if (btn) btn.disabled = false;
+                }}
+            }});
+        }}
+        
+        function skipReadingTimer() {{
+            handleAction('reading_complete', {{}}, () => {{
+                const btn = document.getElementById('orientation-continue-btn');
+                if (btn) btn.disabled = false;
+                const el = document.getElementById('orientation-timer');
+                if (el) el.textContent = '00:00';
+            }});
         }}
         
         function continueFromOrientation() {{
             handleAction('continue', {{}});
         }}
         
+        setInterval(checkOrientationTimer, 1000);
         checkOrientationTimer();
         </script>
         """
@@ -235,18 +266,47 @@ class InteractionPortalV2:
             </div>
             <div class="continue-section">
                 <button onclick="continueFromRole()" 
+                        id="role-continue-btn"
                         class="continue-button" 
                         {"disabled" if not content.get('can_continue', False) else ""}>
                     {content.get('continue_button', 'Continue')}
                 </button>
-                <span class="timer">Time remaining: {content.get('timer_remaining', '')}</span>
+                <span class="timer">Time remaining: <span id="role-timer">{content.get('timer_remaining', '')}</span></span>
+                <div style="margin-top: 10px;">
+                    <a href="javascript:void(0)" onclick="skipRoleTimer()" style="font-size: 12px; color: #95a5a6; text-decoration: underline;">(Skip reading timer for testing)</a>
+                </div>
             </div>
         </div>
         
         <script>
+        function checkRoleTimer() {{
+            handleAction('timer_check', {{}}, (response) => {{
+                if (response && response.timer) {{
+                    const el = document.getElementById('role-timer');
+                    if (el) el.textContent = response.timer;
+                }}
+                if (response && (response.expired || response.can_continue)) {{
+                    const btn = document.getElementById('role-continue-btn');
+                    if (btn) btn.disabled = false;
+                }}
+            }});
+        }}
+        
+        function skipRoleTimer() {{
+            handleAction('reading_complete', {{}}, () => {{
+                const btn = document.getElementById('role-continue-btn');
+                if (btn) btn.disabled = false;
+                const el = document.getElementById('role-timer');
+                if (el) el.textContent = '00:00';
+            }});
+        }}
+        
         function continueFromRole() {{
             handleAction('continue', {{}});
         }}
+        
+        setInterval(checkRoleTimer, 1000);
+        checkRoleTimer();
         </script>
         """
         return html
@@ -259,16 +319,21 @@ class InteractionPortalV2:
         
         exercises_html = ""
         for i, exercise in enumerate(exercises):
-            completed = i < current_exercise
-            is_current = i == current_exercise
+            completed = i < current_exercise or practice_complete
+            is_current = i == current_exercise and not practice_complete
+            
+            ex_btn = ""
+            if is_current:
+                ex_btn = f'<button onclick="submitCurrentExercise(\'{exercise["id"]}\')" class="continue-button" style="margin-top: 10px; padding: 6px 16px; font-size: 14px;">Complete Exercise</button>'
             
             exercises_html += f"""
             <div class="exercise {'completed' if completed else ''} {'current' if is_current else ''}">
                 <h3>{exercise['title']}</h3>
                 <p>{exercise['description']}</p>
                 {'<p class="check-question">' + exercise.get('check_question', '') + '</p>' if 'check_question' in exercise else ''}
-                {'<input type="text" class="exercise-input" placeholder="Your answer">' if is_current and 'check_question' in exercise else ''}
+                {'<input type="text" id="practice-ans" class="exercise-input" placeholder="Your answer">' if is_current and 'check_question' in exercise else ''}
                 {f'<p class="correct-answer">Correct answer: {exercise.get("correct_answer", "")}</p>' if completed and 'correct_answer' in exercise else ''}
+                {ex_btn}
             </div>
             """
         
@@ -281,25 +346,22 @@ class InteractionPortalV2:
                 {exercises_html}
             </div>
             
-            {'<button onclick="completePractice()" class="continue-button">Complete Practice</button>' if practice_complete else ''}
+            <div style="margin-top: 25px; text-align: center;">
+                <button onclick="completePractice()" class="continue-button">Continue to Client Brief</button>
+            </div>
         </div>
         
         <script>
-        function completeExercise(exerciseId) {{
-            handleAction('complete_exercise', {{exercise_id: exerciseId}});
+        function submitCurrentExercise(exerciseId) {{
+            const input = document.getElementById('practice-ans');
+            const answer = input ? input.value : '';
+            handleAction('complete_exercise', {{exercise_id: exerciseId, answer: answer}}, () => {{
+                loadPage('practice');
+            }});
         }}
         
         function completePractice() {{
             handleAction('practice_complete', {{}});
-        }}
-        
-        // Auto-advance through exercises for demo
-        let currentExercise = {current_exercise};
-        const exercises = {json.dumps([e['id'] for e in exercises])};
-        
-        if (currentExercise < exercises.length) {{
-            // In real app, this would be triggered by user actions
-            // For demo, we'll just show all exercises
         }}
         </script>
         """
@@ -353,22 +415,49 @@ class InteractionPortalV2:
         # Left column: Brief and role reminder
         role_reminder = content.get('role_reminder', '')
         client_name = content.get('title', 'Task Page').replace('Task Page - ', '')
+        brief_text = content.get('brief', '')
         
-        # Middle column: Team chat
-        transcript = content.get('transcript', [])
-        folded_blocks = content.get('folded_blocks', [])
-        
-        chat_html = self._render_chat(transcript, folded_blocks)
-        
-        # Right column: Panel or Card Editor
+        # Middle column and Right column
         if is_noai:
-            # NOAI condition: Reference pack
-            right_column = self._render_reference_pack(content.get('panel', {}))
+            # NOAI condition: Middle is reference pack, Right is card editor
+            middle_column = f"""
+            <div class="middle-column">
+                <h2>Reference Pack</h2>
+                {self._render_reference_pack(content.get('panel', {}))}
+            </div>
+            """
+            card_editor = content.get('card_editor', {})
+            right_column = f"""
+            <div class="right-column">
+                <div class="card-editor">
+                    <h3>{content.get('card_editor_label', 'Card Editor')}</h3>
+                    {self._render_card_editor(card_editor)}
+                </div>
+            </div>
+            """
         else:
-            # Regular condition: Panel + Card Editor
+            # Regular condition: Middle is chat, Right is panel + card editor
+            transcript = content.get('transcript', [])
+            folded_blocks = content.get('folded_blocks', [])
+            chat_html = self._render_chat(transcript, folded_blocks)
+            
+            middle_column = f"""
+            <div class="middle-column">
+                <h2>{content.get('team_chat_label', 'Team Chat')}</h2>
+                {chat_html}
+                
+                <div class="message-input">
+                    <textarea id="message-text" placeholder="Type your message..." rows="3"></textarea>
+                    <div class="message-actions">
+                        <button onclick="sendMessage()">Send</button>
+                        <span class="mention-help">Use @name to message a specific agent</span>
+                    </div>
+                </div>
+            </div>
+            """
+            
             panel = content.get('panel', {})
             card_editor = content.get('card_editor', {})
-            
             right_column = f"""
             <div class="right-column">
                 <div class="orchestrator-panel">
@@ -400,27 +489,19 @@ class InteractionPortalV2:
                 <!-- Left: Brief and Role Reminder -->
                 <div class="left-column">
                     <h2>Brief</h2>
-                    <div class="brief-summary">
-                        <!-- Brief content would go here -->
-                        <p>{role_reminder}</p>
+                    <div class="brief-summary" style="max-height: 260px; overflow-y: auto; margin-bottom: 15px; font-size: 13px; line-height: 1.5;">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">{brief_text}</pre>
+                    </div>
+                    <div class="role-reminder-box" style="padding: 10px; background: #eaf2f8; border-radius: 4px; border-left: 3px solid #3498db;">
+                        <strong>Role Reminder:</strong>
+                        <p style="margin-top: 5px; font-size: 13px;">{role_reminder}</p>
                     </div>
                 </div>
                 
-                <!-- Middle: Team Chat -->
-                <div class="middle-column">
-                    <h2>{content.get('team_chat_label', 'Team Chat')}</h2>
-                    {chat_html}
-                    
-                    <div class="message-input">
-                        <textarea id="message-text" placeholder="Type your message..." rows="3"></textarea>
-                        <div class="message-actions">
-                            <button onclick="sendMessage()">Send</button>
-                            <span class="mention-help">Use @name to message a specific agent</span>
-                        </div>
-                    </div>
-                </div>
+                <!-- Middle Column -->
+                {middle_column}
                 
-                <!-- Right: Panel/Card Editor -->
+                <!-- Right Column -->
                 {right_column}
             </div>
             
@@ -433,11 +514,10 @@ class InteractionPortalV2:
         // Update timer every second
         function updateTimer() {{
             handleAction('timer_check', {{}}, (response) => {{
-                if (response.expired) {{
-                    alert('Time is up!');
+                if (response && response.expired) {{
                     document.getElementById('task-timer').textContent = '00:00';
-                }} else {{
-                    document.getElementById('task-timer').textContent = response.timer || '00:00';
+                }} else if (response && response.timer) {{
+                    document.getElementById('task-timer').textContent = response.timer;
                 }}
             }});
         }}
@@ -457,6 +537,8 @@ class InteractionPortalV2:
                 text: text,
                 addressees: addressees,
                 at_mention_used: atMentionUsed
+            }}, (response) => {{
+                loadPage(currentPage);
             }});
             
             document.getElementById('message-text').value = '';
@@ -466,15 +548,21 @@ class InteractionPortalV2:
             handleAction('submit', {{}});
         }}
         
-        // Allow Enter key to send message
-        document.getElementById('message-text').addEventListener('keypress', (e) => {{
-            if (e.key === 'Enter' && !e.shiftKey) {{
-                e.preventDefault();
-                sendMessage();
-            }}
-        }});
+        // Allow Enter key to send message if input exists
+        const msgInput = document.getElementById('message-text');
+        if (msgInput) {{
+            msgInput.addEventListener('keypress', (e) => {{
+                if (e.key === 'Enter' && !e.shiftKey) {{
+                    e.preventDefault();
+                    sendMessage();
+                }}
+            }});
+        }}
         
-        // Initial timer update
+        // Auto scroll chat transcript
+        const chatTr = document.querySelector('.chat-transcript');
+        if (chatTr) {{ chatTr.scrollTop = chatTr.scrollHeight; }}
+        
         updateTimer();
         </script>
         """
@@ -510,36 +598,46 @@ class InteractionPortalV2:
         
         return chat_html + """
         <script>
-        function toggleBlock(blockId) {{
-            handleAction('fold_toggle', {{block_id: blockId}}, (response) => {{
+        function toggleBlock(blockId) {
+            handleAction('fold_toggle', {block_id: blockId}, (response) => {
                 // Update UI to reflect new state
-                const block = document.querySelector(`.folded-block[data-block-id="${{blockId}}"]`);
-                if (block) {{
+                const block = document.querySelector(`.folded-block[data-block-id="${blockId}"]`);
+                if (block) {
                     block.classList.toggle('open');
                     block.classList.toggle('closed');
                     const header = block.querySelector('.block-toggle');
-                    if (header) {{
+                    if (header) {
                         header.textContent = block.classList.contains('open') ? '-' : '+';
-                    }}
-                }}
-            }});
-        }}
+                    }
+                }
+            });
+        }
         </script>
         """
     
     def _render_reference_pack(self, panel: Dict) -> str:
         """Render reference pack for NOAI condition"""
-        # In NOAI, the right column shows reference pack sections
-        sections = panel.get('sections', [])
+        sections = [
+            ("Client Analysis", "content/reference_packs/nia_pack.md"),
+            ("Creative & Assets", "content/reference_packs/theo_pack.md"),
+            ("Compliance & Licences", "content/reference_packs/rhys_pack.md"),
+            ("Production Specs", "content/reference_packs/mira_pack.md"),
+        ]
         
         sections_html = ""
-        for section in sections:
+        for title, filepath in sections:
+            content_text = ""
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content_text = f.read()
+            except Exception:
+                content_text = f"Reference material for {title}."
+                
             sections_html += f"""
-            <div class="pack-section">
-                <h4>{section}</h4>
-                <div class="pack-content">
-                    <!-- Content would be loaded from reference pack files -->
-                    <p>Reference material for {section}...</p>
+            <div class="pack-section" style="margin-bottom: 12px; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+                <h4 style="margin-bottom: 6px; cursor: pointer; color: #2c3e50;" onclick="this.nextElementSibling.style.display = (this.nextElementSibling.style.display === 'none' ? 'block' : 'none')">▼ {title}</h4>
+                <div class="pack-content" style="font-size: 13px; max-height: 180px; overflow-y: auto;">
+                    <pre style="white-space: pre-wrap; font-family: inherit;">{content_text}</pre>
                 </div>
             </div>
             """
@@ -625,6 +723,8 @@ class InteractionPortalV2:
             handleAction('card_action', {{
                 field: fieldId,
                 action: action
+            }}, () => {{
+                loadPage(currentPage);
             }});
         }}
         
@@ -877,14 +977,20 @@ class InteractionPortalV2:
         """
         return html
     
-    def handle_action(self, action: str, data: Dict) -> Dict:
+    def handle_action(self, action: str, data: Dict, pid: Optional[str] = None, page: Optional[str] = None) -> Dict:
         """Handle user action from frontend"""
-        sim = self._get_current_simulation()
+        sim = self._get_current_simulation(pid)
         if not sim:
             return {"success": False, "error": "No active session"}
         
-        # Get current page
-        current_page = PageType(self.state.get("current_page", PageType.ENTRY.value))
+        # Determine current page: prefer explicit page parameter if valid
+        if page:
+            try:
+                current_page = PageType(page)
+            except ValueError:
+                current_page = sim.session.current_page
+        else:
+            current_page = sim.session.current_page if hasattr(sim, 'session') and hasattr(sim.session, 'current_page') else PageType(self.state.get("current_page", PageType.ENTRY.value))
         
         # Handle action through simulation
         try:
@@ -900,14 +1006,14 @@ class InteractionPortalV2:
             logger.error(f"Error handling action: {e}")
             return {"success": False, "error": str(e)}
     
-    def get_current_page(self) -> str:
+    def get_current_page(self, pid: Optional[str] = None) -> str:
         """Get current page HTML"""
-        sim = self._get_current_simulation()
+        sim = self._get_current_simulation(pid)
         if not sim:
             # Show entry page
-            return self._render_entry_page({})
+            return self._wrap_with_layout(self._render_entry_page({}), PageType.ENTRY)
         
-        current_page = PageType(self.state.get("current_page", PageType.ENTRY.value))
+        current_page = sim.session.current_page if hasattr(sim, 'session') and hasattr(sim.session, 'current_page') else PageType(self.state.get("current_page", PageType.ENTRY.value))
         
         # Get page content
         page_html = self._get_page_html(current_page, sim)
@@ -921,6 +1027,7 @@ class InteractionPortalV2:
         
         # Check if Qualtrics is enabled
         qualtrics_enabled = config.qualtrics.enabled
+        pid_val = self.state.get("pid", "") or ""
         
         html = f"""
         <!DOCTYPE html>
@@ -940,44 +1047,72 @@ class InteractionPortalV2:
             
             <script>
             // Global state
-            let currentPage = '{page_type.value}';
+            window.currentPage = '{page_type.value}';
+            var currentPage = window.currentPage;
+            window.currentPid = '{pid_val}';
             
             // Handle actions
-            function handleAction(action, data, callback) {{
-                // Send action to backend
+            window.handleAction = function(action, data, callback) {{
+                const pid = window.currentPid || '{pid_val}';
                 fetch('/action', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{
                         action: action,
-                        data: data,
-                        page: currentPage,
-                        pid: '{self.state.get("pid", "")}'
+                        data: data || {{}},
+                        page: window.currentPage,
+                        pid: pid
                     }})
                 }})
                 .then(response => response.json())
                 .then(result => {{
-                    if (result.next_page) {{
-                        currentPage = result.next_page;
-                        // Refresh page
-                        loadPage(currentPage);
+                    if (result && result.next_page) {{
+                        window.currentPage = result.next_page;
+                        loadPage(window.currentPage);
                     }}
                     if (callback) {{
                         callback(result);
                     }}
                 }})
                 .catch(error => {{
-                    console.error('Error:', error);
+                    console.error('Error in handleAction:', error);
                 }});
-            }}
+            }};
+            var handleAction = window.handleAction;
             
             // Load page
-            function loadPage(page) {{
-                currentPage = page;
-                // In Gradio, we'd use the update function
-                // For now, just log
-                console.log('Loading page:', page);
-            }}
+            window.loadPage = function(page) {{
+                if (page) {{
+                    window.currentPage = page;
+                }}
+                const pid = window.currentPid || '{pid_val}';
+                fetch('/page?pid=' + encodeURIComponent(pid))
+                    .then(response => response.text())
+                    .then(html => {{
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newContainer = doc.querySelector('.app-container');
+                        const currentContainers = document.querySelectorAll('.app-container');
+                        if (newContainer && currentContainers.length > 0) {{
+                            const target = currentContainers[currentContainers.length - 1];
+                            target.innerHTML = newContainer.innerHTML;
+                            // Re-execute scripts
+                            const scripts = target.querySelectorAll('script');
+                            scripts.forEach(oldScript => {{
+                                const newScript = document.createElement('script');
+                                Array.from(oldScript.attributes).forEach(attr => {{
+                                    newScript.setAttribute(attr.name, attr.value);
+                                }});
+                                newScript.text = oldScript.text;
+                                oldScript.parentNode.replaceChild(newScript, oldScript);
+                            }});
+                        }}
+                    }})
+                    .catch(error => {{
+                        console.error('Error in loadPage:', error);
+                    }});
+            }};
+            var loadPage = window.loadPage;
             
             // Window focus/blur tracking
             window.addEventListener('blur', () => {{
@@ -994,9 +1129,6 @@ class InteractionPortalV2:
                     scroll_position: window.scrollY
                 }});
             }});
-            
-            // Initial page load
-            loadPage(currentPage);
             </script>
         </body>
         </html>
@@ -1542,10 +1674,8 @@ def create_gradio_interface():
     """Create and return the Gradio interface"""
     app = get_app()
     
-    # Create a simple Gradio interface that serves the HTML
-    # In production, this would be more sophisticated
-    
-    with gr.Blocks(title="Interaction Portal v2", theme=gr.themes.Soft()) as demo:
+    # Create Gradio interface that serves the HTML
+    with gr.Blocks(title="Interaction Portal v2") as demo:
         gr.Markdown("# Interaction Portal v2")
         gr.Markdown("Multi-agent chat simulation for leadership and team coordination research")
         
@@ -1572,30 +1702,29 @@ def create_gradio_interface():
             sim = SimulationV2(
                 pid=pid,
                 condition_code=condition,
-                user_agent="Gradio Test",
+                user_agent="Gradio Interface",
                 viewport={"width": 1024, "height": 768}
             )
             
             # Store in app
+            sim.session.current_page = PageType.ORIENTATION
             app.simulations[pid] = sim
-            app._update_state(pid=pid, condition_code=condition, current_page="entry")
+            app._update_state(pid=pid, condition_code=condition, current_page=PageType.ORIENTATION.value)
             
-            # Get entry page
-            return app.get_current_page()
+            # Get orientation page
+            return app.get_current_page(pid)
         
         def handle_action_wrapper(action, data_str, page):
             """Wrapper for handle_action that works with Gradio"""
             try:
                 data = json.loads(data_str) if data_str else {}
                 app = get_app()
-                result = app.handle_action(action, data)
+                result = app.handle_action(action, data, page=page)
                 
                 # If there's a next page, update and return it
                 if result.get("next_page"):
                     app._update_state(current_page=result["next_page"])
-                    return app.get_current_page()
-                else:
-                    return json.dumps(result)
+                return app.get_current_page()
             except Exception as e:
                 return f"Error: {str(e)}"
         
@@ -1617,6 +1746,49 @@ def create_gradio_interface():
                 inputs=[action_input, data_input, page_input],
                 outputs=[display]
             )
+
+    # Attach FastAPI endpoints for client-side fetch requests
+    from fastapi import Request
+    from fastapi.responses import HTMLResponse, JSONResponse
+    
+    @demo.app.post("/action")
+    async def api_action(request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        action = payload.get("action", "")
+        data = payload.get("data", {})
+        pid = payload.get("pid")
+        page_val = payload.get("page")
+        app_inst = get_app()
+        if pid and pid in app_inst.simulations:
+            app_inst._update_state(pid=pid)
+        result = app_inst.handle_action(action, data, pid=pid, page=page_val)
+        return JSONResponse(content=result)
+        
+    @demo.app.get("/page")
+    async def api_page(request: Request, pid: Optional[str] = None):
+        app_inst = get_app()
+        if pid and pid in app_inst.simulations:
+            app_inst._update_state(pid=pid)
+        html_content = app_inst.get_current_page(pid=pid)
+        return HTMLResponse(content=html_content)
+        
+    @demo.app.get("/portal")
+    async def api_portal(request: Request, pid: str = "test_001", condition: str = "GEN-COORD"):
+        app_inst = get_app()
+        reset_logger()
+        sim = app_inst._get_simulation(
+            pid, condition,
+            request.headers.get("user-agent", "Browser"),
+            {"width": 1024, "height": 768}
+        )
+        sim.session.current_page = PageType.ENTRY
+        app_inst.simulations[pid] = sim
+        app_inst._update_state(pid=pid, condition_code=condition, current_page=PageType.ENTRY.value)
+        html_content = app_inst.get_current_page(pid=pid)
+        return HTMLResponse(content=html_content)
     
     return demo
 
@@ -1624,4 +1796,4 @@ def create_gradio_interface():
 if __name__ == "__main__":
     # Create and launch Gradio interface
     demo = create_gradio_interface()
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, theme=gr.themes.Soft())

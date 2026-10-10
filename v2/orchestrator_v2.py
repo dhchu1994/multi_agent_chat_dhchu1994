@@ -56,14 +56,15 @@ class MessageRouter:
             # Message has explicit addressees
             recipients = []
             for addressee in addressees:
-                if addressee in self.agent_names:
-                    recipients.append(addressee)
-                elif addressee == "all":
+                addr_lower = addressee.lower()
+                if addr_lower in self.agent_names:
+                    recipients.append(addr_lower)
+                elif addr_lower == "all":
                     recipients = self.agent_names[:-1]  # All specialists (not orchestrator)
                     break
             
             # If orchestrator is in addressees, it's a direct message
-            is_orchestrator = "orchestrator" in addressees
+            is_orchestrator = "orchestrator" in [a.lower() for a in addressees]
             
             return RoutingResult(
                 recipients=recipients,
@@ -78,8 +79,9 @@ class MessageRouter:
             # Message has @mentions - send to mentioned agents only
             recipients = []
             for mention in mentions:
-                if mention in self.agent_names:
-                    recipients.append(mention)
+                m_lower = mention.lower()
+                if m_lower in self.agent_names:
+                    recipients.append(m_lower)
             
             return RoutingResult(
                 recipients=recipients,
@@ -100,7 +102,7 @@ class MessageRouter:
         # Match @name patterns
         pattern = r'@(\w+)'
         matches = re.findall(pattern, text)
-        return matches
+        return [m.lower() for m in matches]
 
 
 class FoldedBlockManager:
@@ -193,7 +195,7 @@ class PanelManager:
     def _get_forbidden_language(self) -> List[str]:
         """Get forbidden language for this condition's panel level"""
         config = get_config()
-        panel_config = config.panel
+        panel_config = getattr(config, 'panel', {}) or {}
         level = self.condition.panel_level
         
         if level in panel_config:
@@ -345,7 +347,7 @@ class OrchestratorV2:
 
 if __name__ == "__main__":
     # Test orchestrator
-    from v2.config_loader_v2 import get_config
+    from config_loader_v2 import get_config
     
     config = get_config()
     condition = config.conditions["GEN-TASK"]
@@ -386,7 +388,7 @@ if __name__ == "__main__":
     print("\n--- Testing Folded Blocks ---")
     
     # Create a message
-    from v2.agents_v2 import Message
+    from agents_v2 import Message
     msg = Message(
         text="Orchestrator: Please respond to this",
         sender="orchestrator",

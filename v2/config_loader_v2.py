@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelConfig:
     """Model configuration"""
-    version: str
-    base_url: str
-    api_key: str
+    version: str = "gpt-4-2024-05-13"
+    base_url: str = "https://api.openai.com/v1"
+    api_key: str = ""
     timeout: int = 60
     max_retries: int = 1
 
@@ -56,7 +56,7 @@ class SessionConfig:
 @dataclass
 class EditorConfig:
     """Card editor configuration per condition"""
-    type: str  # "read_only", "evaluative", "generative"
+    type: str = "read_only"  # "read_only", "evaluative", "generative"
     submit_only: Optional[bool] = None
     send_back_needs_reason: Optional[bool] = None
     min_typed_share: Optional[int] = None
@@ -82,9 +82,9 @@ class NOAIConfig:
 @dataclass
 class ConditionConfig:
     """Single condition configuration"""
-    code: str
-    role: str  # "passive", "evaluative", "generative", "none"
-    panel_level: str  # "coordination", "task_focused", "developmental", "none"
+    code: str = ""
+    role: str = "passive"  # "passive", "evaluative", "generative", "none"
+    panel_level: str = "coordination"  # "coordination", "task_focused", "developmental", "none"
     editor: EditorConfig = field(default_factory=EditorConfig)
     panel: PanelConfig = field(default_factory=PanelConfig)
     noai: Optional[NOAIConfig] = None
@@ -93,42 +93,42 @@ class ConditionConfig:
 @dataclass
 class AgentConfig:
     """Single agent configuration"""
-    name: str
-    label: str
-    description: str
-    system_prompt: str
+    name: str = ""
+    label: str = ""
+    description: str = ""
+    system_prompt: str = ""
 
 
 @dataclass
 class AgentsConfig:
     """All agents configuration"""
-    nia: AgentConfig
-    theo: AgentConfig
-    rhys: AgentConfig
-    mira: AgentConfig
-    orchestrator: AgentConfig
+    nia: AgentConfig = field(default_factory=AgentConfig)
+    theo: AgentConfig = field(default_factory=AgentConfig)
+    rhys: AgentConfig = field(default_factory=AgentConfig)
+    mira: AgentConfig = field(default_factory=AgentConfig)
+    orchestrator: AgentConfig = field(default_factory=AgentConfig)
 
 
 @dataclass
 class ClientConfig:
     """Single client configuration"""
-    name: str
-    brief_file: str
-    private_material: Dict[str, str]  # agent_name -> file path
-    hidden_items: List[str]
+    name: str = ""
+    brief_file: str = ""
+    private_material: Dict[str, str] = field(default_factory=dict)  # agent_name -> file path
+    hidden_items: List[str] = field(default_factory=list)
     fixed_last: bool = False
 
 
 @dataclass
 class PracticeExerciseConfig:
     """Single practice exercise configuration"""
-    id: str
-    title: str
-    description: str
-    expected_action: str
-    expected_addressees: str
-    scripted_reply: str
-    next_unlocked: str
+    id: str = ""
+    title: str = ""
+    description: str = ""
+    expected_action: str = ""
+    expected_addressees: str = ""
+    scripted_reply: str = ""
+    next_unlocked: str = ""
 
 
 @dataclass
@@ -141,10 +141,10 @@ class PracticeConfig:
 @dataclass
 class CheckinItemConfig:
     """Single check-in question configuration"""
-    id: str
-    question: str
-    type: str  # "likert", "multiple_choice"
-    options: List[str]
+    id: str = ""
+    question: str = ""
+    type: str = "likert"  # "likert", "multiple_choice"
+    options: List[str] = field(default_factory=list)
     skip_for_noai: bool = False
 
 
@@ -157,9 +157,9 @@ class CheckinConfig:
 @dataclass
 class CardFieldConfig:
     """Single card field configuration"""
-    id: str
-    label: str
-    placeholder: str
+    id: str = ""
+    label: str = ""
+    placeholder: str = ""
     required: bool = True
 
 
@@ -275,8 +275,8 @@ class ApplicationConfig:
 @dataclass
 class FullConfig:
     """Complete configuration for Interaction Portal v2"""
-    model: ModelConfig
-    agents: AgentsConfig
+    model: ModelConfig = field(default_factory=ModelConfig)
+    agents: AgentsConfig = field(default_factory=AgentsConfig)
     application: ApplicationConfig = field(default_factory=ApplicationConfig)
     qualtrics: QualtricsConfig = field(default_factory=QualtricsConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
@@ -287,6 +287,7 @@ class FullConfig:
     checkin: CheckinConfig = field(default_factory=CheckinConfig)
     card_editor: CardEditorConfig = field(default_factory=CardEditorConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    panel: Dict[str, Any] = field(default_factory=dict)
     ui: UIConfig = field(default_factory=UIConfig)
     text: TextContentConfig = field(default_factory=TextContentConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
@@ -294,6 +295,38 @@ class FullConfig:
     # Runtime info
     config_file_path: str = ""
     config_version: str = ""
+
+    def get_condition(self, condition_code: str) -> ConditionConfig:
+        """Get condition config by code"""
+        if condition_code not in self.conditions:
+            raise ValueError(f"Unknown condition code: {condition_code}")
+        return self.conditions[condition_code]
+
+    def get_client(self, client_id: str) -> ClientConfig:
+        """Get client config by ID"""
+        if client_id not in self.clients:
+            raise ValueError(f"Unknown client ID: {client_id}")
+        return self.clients[client_id]
+
+    def get_agent(self, agent_name: str) -> AgentConfig:
+        """Get agent config by name"""
+        agent_map = {
+            'nia': self.agents.nia,
+            'theo': self.agents.theo,
+            'rhys': self.agents.rhys,
+            'mira': self.agents.mira,
+            'orchestrator': self.agents.orchestrator
+        }
+        if agent_name not in agent_map:
+            raise ValueError(f"Unknown agent: {agent_name}")
+        return agent_map[agent_name]
+
+    def get_text(self, section: str, key: str, default: str = "") -> str:
+        """Get text content by section and key"""
+        section_obj = getattr(self.text, section, None)
+        if section_obj and isinstance(section_obj, dict):
+            return section_obj.get(key, default)
+        return default
 
 
 class ConfigLoaderV2:
@@ -360,10 +393,21 @@ class ConfigLoaderV2:
         if 'conditions' in raw:
             config.conditions = {}
             for code, cond_raw in raw['conditions'].items():
-                cond_config = ConditionConfig(**cond_raw)
-                # Handle optional noai field
-                if 'noai' in cond_raw:
-                    cond_config.noai = NOAIConfig(**cond_raw['noai'])
+                cond_dict = dict(cond_raw)
+                editor_raw = cond_dict.pop('editor', None)
+                panel_raw = cond_dict.pop('panel', None)
+                noai_raw = cond_dict.pop('noai', None)
+                
+                editor_config = EditorConfig(**editor_raw) if isinstance(editor_raw, dict) else (editor_raw or EditorConfig())
+                panel_config = PanelConfig(**panel_raw) if isinstance(panel_raw, dict) else (panel_raw or PanelConfig())
+                noai_config = NOAIConfig(**noai_raw) if isinstance(noai_raw, dict) else noai_raw
+                
+                cond_config = ConditionConfig(
+                    editor=editor_config,
+                    panel=panel_config,
+                    noai=noai_config,
+                    **cond_dict
+                )
                 config.conditions[code] = cond_config
         
         # Agents
@@ -420,6 +464,10 @@ class ConfigLoaderV2:
         # Logging
         if 'logging' in raw:
             config.logging = LoggingConfig(**raw['logging'])
+        
+        # Panel
+        if 'panel' in raw:
+            config.panel = raw['panel']
         
         # UI
         if 'ui' in raw:

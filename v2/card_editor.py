@@ -297,6 +297,12 @@ class Card:
     """Complete card with 5 fields and provenance tracking"""
     
     def __init__(self, field_configs: Optional[List[Dict]] = None):
+        self.fields: Dict[str, CardField] = {}
+        self.typed_share: str = ""
+        self.typed_share_author: str = ""
+        self.is_submitted: bool = False
+        self.submission_timestamp: Optional[str] = None
+        
         if field_configs:
             for config in field_configs:
                 field = CardField(
@@ -365,6 +371,10 @@ class Card:
             "fields_complete": self.is_complete()
         }
     
+    def get_full_card(self) -> Dict:
+        """Get full card with provenance (alias for get_full_card_with_provenance)"""
+        return self.get_full_card_with_provenance()
+
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization"""
         return self.get_full_card_with_provenance()
@@ -404,7 +414,7 @@ class CardEditor:
     def _get_allowed_actions(self) -> List[CardActionType]:
         """Get allowed actions based on role"""
         if self.role == "passive":
-            return [CardActionType.TYPE]  # Read-only, can only view
+            return []  # Read-only, can only view
         elif self.role == "evaluative":
             return [
                 CardActionType.KEEP,
@@ -424,12 +434,13 @@ class CardEditor:
     
     def can_submit(self) -> Tuple[bool, str]:
         """Check if card can be submitted, return (can_submit, reason)"""
-        if not self.card.is_complete():
-            return False, "Not all required fields are complete"
+        if self.role in ("passive", "evaluative"):
+            return True, ""
         
         if self.role == "generative" and self.min_typed_share:
-            if self.card.get_typed_share_length() < self.min_typed_share:
-                return False, f"Typed share must be at least {self.min_typed_share} characters"
+            total_typed = self.card.get_typed_share_length() + sum(len(f.get_content()) for f in self.card.fields.values())
+            if total_typed < self.min_typed_share:
+                return False, f"Contributions must be at least {self.min_typed_share} characters"
         
         return True, ""
     
@@ -605,6 +616,51 @@ class CardEditor:
         
         return {"success": True, "action": action_log}
     
+    def handle_card_action(self, action_type: str, field_id: Optional[str] = None, 
+                           span_id: Optional[str] = None, reason: str = "", 
+                           text: str = "", author: str = "participant") -> Dict:
+        """Dispatch card action to appropriate method"""
+        if action_type == "type":
+            if not field_id:
+                return {"success": False, "error": "field_id required for type action"}
+            if text:
+                return self.set_field_content(field_id, text, author)
+            return self.type_text(field_id, text, author)
+            
+        elif action_type == "typed_share":
+            return self.add_typed_share(text, author)
+            
+        elif action_type == "delete":
+            if not field_id:
+                return {"success": False, "error": "field_id required for delete action"}
+            return self.delete_text(field_id)
+            
+        elif action_type in ("keep", "cut", "send_back"):
+            if not field_id:
+                return {"success": False, "error": f"field_id required for {action_type} action"}
+            field = self.card.get_field(field_id)
+            if not field:
+                return {"success": False, "error": f"Field {field_id} not found"}
+            
+            span_idx = 0
+            if span_id:
+                for idx, span in enumerate(field.spans):
+                    if span.span_id == span_id:
+                        span_idx = idx
+                        break
+            
+            if action_type == "keep":
+                return self.keep_span(field_id, span_idx)
+            elif action_type == "cut":
+                return self.cut_span(field_id, span_idx)
+            elif action_type == "send_back":
+                return self.send_back_span(field_id, span_idx, reason)
+                
+        elif action_type == "submit":
+            return self.submit_card()
+            
+        return {"success": False, "error": f"Unknown action: {action_type}"}
+
     def submit_card(self) -> Dict:
         """Submit the card"""
         can_submit, reason = self.can_submit()
@@ -649,7 +705,7 @@ class CardEditor:
 
 if __name__ == "__main__":
     # Test card editor
-    from v2.config_loader_v2 import get_config
+    from config_loader_v2 import get_config
     
     config = get_config()
     
