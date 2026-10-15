@@ -1,3 +1,4 @@
 conversations/
+interaction_portal/logs
 __pycache__/
 *.json
