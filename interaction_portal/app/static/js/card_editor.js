@@ -58,17 +58,49 @@
     const ta = el("textarea", this.o.fields.length === 1 && this.o.big ? "write-area big" : "");
     ta.placeholder = f.hint && this.o.role !== "none" ? f.hint : (this.texts.write_here || "");
     ta.rows = this.o.fields.length === 1 ? 5 : 3;
+    const maxChars = (this.view && this.view.max_span_chars) || 600;
+    ta.maxLength = maxChars;
+
+    const counter = el("div", "char-counter");
+    counter.style.fontSize = "0.75rem";
+    counter.style.color = "var(--muted, #888)";
+    counter.style.textAlign = "right";
+    counter.style.marginTop = "2px";
+    const updateCounter = () => {
+      const cur = ta.value.length;
+      counter.textContent = cur + " / " + (ta.maxLength || maxChars);
+      counter.style.color = cur >= (ta.maxLength || maxChars) ? "var(--err, #d9534f)" : (cur >= (ta.maxLength || maxChars) * 0.9 ? "var(--warn, #f0ad4e)" : "var(--muted, #888)");
+    };
+    updateCounter();
+
     ta.addEventListener("input", () => {
+      updateCounter();
       this.pending[f.id] = ta.value;
       this.setSaveLine("…");
       clearTimeout(this.timers[f.id]);
       this.timers[f.id] = setTimeout(() => this.sendText(f.id), 700);
     });
+    ta.addEventListener("paste", (e) => {
+      const allowPaste = this.view ? (this.view.allow_paste !== false) : true;
+      const pastedData = (e.clipboardData || window.clipboardData).getData("text") || "";
+      if (allowPaste === false) {
+        e.preventDefault();
+        alert(this.texts.no_paste || "Pasting is disabled for this study. Please type your response.");
+        return;
+      }
+      if (pastedData) {
+        this.pasteCount = (this.pasteCount || 0) + pastedData.length;
+        if (window.Portal && window.Portal.event) {
+          Portal.event("card_paste", { chars: pastedData.length, field: f.id });
+        }
+      }
+    });
     ta.addEventListener("blur", () => { clearTimeout(this.timers[f.id]); if (f.id in this.pending) this.sendText(f.id); });
     body.appendChild(ta);
+    body.appendChild(counter);
     const sugg = el("div", "suggs");
     body.appendChild(sugg);
-    this.refs[f.id] = { ta: ta, sugg: sugg };
+    this.refs[f.id] = { ta: ta, counter: counter, updateCounter: updateCounter, sugg: sugg };
   };
 
   CardEditor.prototype.setSaveLine = function (t) { if (this.saveLine) this.saveLine.textContent = t || ""; };
@@ -84,8 +116,10 @@
     const text = this.pending[fieldId];
     if (text === undefined) return;
     delete this.pending[fieldId];
+    const pasteChars = this.pasteCount || 0;
+    this.pasteCount = 0;
     this.inflight = (this.inflight || 0) + 1;
-    const r = await this.call({ action: "type", field: fieldId, text: text });
+    const r = await this.call({ action: "type", field: fieldId, text: text, paste_chars: pasteChars, pasted: pasteChars > 0 });
     this.inflight--;
     this.setSaveLine(r && r.ok === false ? (r.error || "") : "");
   };
@@ -162,9 +196,12 @@
   CardEditor.prototype.renderText = function (fid) {
     const ref = this.refs[fid];
     if (!ref) return;
+    const maxChars = (this.view && this.view.max_span_chars) || 600;
+    ref.ta.maxLength = maxChars;
     const serverText = (this.view.text && this.view.text[fid]) || "";
     const typingNow = document.activeElement === ref.ta || (fid in this.pending);
     if (!typingNow && ref.ta.value !== serverText) ref.ta.value = serverText;
+    if (ref.updateCounter) ref.updateCounter();
     ref.sugg.innerHTML = "";
     ((this.view.suggestions && this.view.suggestions[fid]) || []).forEach((s) => {
       const box = el("div", "sugg");

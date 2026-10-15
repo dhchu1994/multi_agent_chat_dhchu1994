@@ -115,6 +115,7 @@ class AutopilotDriver:
                              f"Reached exit page with completion code: {state.completion_code}")
                 self.mgr.end_session(state, "completed")
         else:
+            state = self.mgr.check_active(self.pid)
             cid = self.mgr.sm.client_id(state) or self.target_client
             self._run_single_client_task(state, cid)
 
@@ -143,6 +144,7 @@ class AutopilotDriver:
 
         # Practice
         self._solve_practice(state)
+        state = self.mgr.check_active(self.pid)
         # Advance from practice to brief
         self.mgr.sm.advance(state, self.mgr.logger(state), reason="autopilot_continue")
         self._record("PAGE_PRACTICE", state.page == "brief", f"Practice done -> entered {state.page}")
@@ -378,7 +380,7 @@ def run_harness_b(
 ) -> tuple[bool, dict[str, Any]]:
     cfg = load_config(config_path)
     if provider:
-        cfg.llm.provider = provider
+        cfg.set_provider(provider)
     # Scale timers down during autopilot for speed
     cfg.timer_scale = 100.0
 
@@ -419,7 +421,7 @@ def main() -> None:
     parser.add_argument("--full-session", action="store_true", help="Run full 7-client session to completion")
     parser.add_argument("--all-conditions", action="store_true", help="Run all 10 conditions")
     parser.add_argument("--output", default="harness_b_report.json", help="Report output path")
-    parser.add_argument("--provider", default=None, help="Override LLM provider")
+    parser.add_argument("--provider", default=None, help="Override LLM provider (mock, openai, claude, deepseek, glm, qwen)")
     args = parser.parse_args()
 
     passed, _ = run_harness_b(

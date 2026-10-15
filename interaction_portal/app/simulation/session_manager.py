@@ -28,7 +28,11 @@ from .chat_router import Route, format_options, parse_message
 
 _POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="agent")
 
-CLIENT_EVENTS = {"window_blur", "window_focus", "scroll_sample", "fold_open", "fold_close", "pack_open", "pack_close"}
+CLIENT_EVENTS = {
+    "window_blur", "window_focus", "scroll_sample", "fold_open", "fold_close",
+    "pack_open", "pack_close", "theme_change", "card_paste",
+    "keystroke_summary", "paste", "cut", "drop", "focus_field", "blur_field",
+}
 
 
 class PortalError(Exception):
@@ -143,7 +147,7 @@ class SessionManager:
                 self.sm.advance(state, log, reason="timer_expired")
             elif state.page == "break" and self.sm.break_remaining(state) <= 0:
                 log.log("break_end", "break", self.sm.client_id(state), ended_early=False,
-                        seconds_elapsed=self.cfg.timers.break_seconds)
+                        seconds_elapsed=self.cfg.scaled(self.cfg.timers.break_seconds))
                 log.log("timer_expired", "break", self.sm.client_id(state), timer_name="break")
                 self.sm.advance(state, log, reason="timer_expired")
             self._after_advance(state)
@@ -200,18 +204,98 @@ class SessionManager:
             if event_type in ("pack_open", "pack_close") and state.page == "practice" and event_type == "pack_open":
                 state.practice_flags["pack_opened"] = True
                 self.save(state)
-            clean = {k: v for k, v in metadata.items() if k in ("block_id", "section_name", "scroll_top", "scroll_height", "viewport_height")}
-            self.logger(state).log(event_type, state.page, self.sm.client_id(state), **clean)
+            clean = {}
+            for k, v in metadata.items():
+                if not isinstance(k, str) or len(k) > 64:
+                    continue
+                if isinstance(v, str):
+                    clean[k] = v[:64]
+                elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                    clean[k] = v
+                elif isinstance(v, bool):
+                    clean[k] = v
+            t_raw = metadata.get("timestamp") or metadata.get("t_client")
+            t_client = None
+            if isinstance(t_raw, (int, float)):
+                try:
+                    t_client = datetime.fromtimestamp(t_raw / 1000.0, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                except Exception:
+                    pass
+            elif isinstance(t_raw, str) and t_raw:
+                t_client = t_raw[:64]
+            self.logger(state).log(event_type, state.page, self.sm.client_id(state), timestamp=t_client, **clean)
             self.touch(state)
 
-    def record_viewport(self, pid: str, viewport: dict) -> bool:
-        """Returns False when the viewport is too small for the study."""
+    def client_events_batch(self, pid: str, events: list[dict]) -> None:
+        with self.lock(pid):
+            state = self.check_active(pid)
+            cid = self.sm.client_id(state)
+            clean_events = []
+            now_iso = utc_now_iso()
+            for raw in events:
+                etype = str(raw.get("type") or raw.get("event_type") or "")
+                if etype not in CLIENT_EVENTS:
+                    continue
+                meta = raw.get("metadata") or {}
+                clean_meta = {}
+                for k, v in meta.items():
+                    if not isinstance(k, str) or len(k) > 64:
+                        continue
+                    if isinstance(v, str):
+                        clean_meta[k] = v[:64]
+                    elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                        clean_meta[k] = v
+                    elif isinstance(v, bool):
+                        clean_meta[k] = v
+                t_raw = raw.get("timestamp") or raw.get("t_client") or meta.get("t_client")
+                if isinstance(t_raw, (int, float)):
+                    try:
+                        t_client = datetime.fromtimestamp(t_raw / 1000.0, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                    except Exception:
+                        t_client = now_iso
+                elif isinstance(t_raw, str) and t_raw:
+                    t_client = t_raw[:64]
+                else:
+                    t_client = now_iso
+                clean_events.append({
+                    "pid": pid,
+                    "timestamp": t_client,
+                    "client_id": cid,
+                    "page_id": state.page,
+                    "event_type": etype,
+                    "autopilot": state.autopilot,
+                    "metadata": clean_meta
+                })
+            if clean_events:
+                self.store.log_batch(clean_events)
+            self.touch(state)
+
+    def record_viewport(self, pid: str, viewport: dict, user_agent: str = "") -> bool:
+        """Returns False when the viewport or device is blocked (tablet/iPad, coarse pointer, mobile)."""
+        width = int(viewport.get("width", 0))
+        max_touch = int(viewport.get("maxTouchPoints", 0))
+        pointer_coarse = bool(viewport.get("pointer_coarse", False))
+        is_mobile = bool(viewport.get("is_mobile", False))
+        ua = user_agent.lower()
+
+        allowed = True
+        if not self.cfg.allow_mobile:
+            if width < self.cfg.min_viewport_width:
+                allowed = False
+            elif pointer_coarse:
+                allowed = False
+            elif max_touch > 1 and ("macintosh" in ua or "mac os x" in ua):
+                allowed = False
+            elif is_mobile:
+                allowed = False
+
         with self.lock(pid):
             state = self.check_active(pid)
             state.viewport = viewport
+            state.viewport_allowed = allowed
             self.save(state)
-            self.logger(state).log("client_info", state.page, None, viewport=viewport)
-        return int(viewport.get("width", 0)) >= self.cfg.min_viewport_width or self.cfg.allow_mobile
+            self.logger(state).log("client_info", state.page, None, viewport=viewport, allowed=allowed)
+        return allowed
 
     # ------------------------------------------------------------------ card
     def card(self, state: SessionState, key: str | None = None) -> Card:
@@ -228,6 +312,7 @@ class SessionManager:
         card = card or self.card(state)
         d = card.to_json(full=False)
         d["min_typed_share"] = self.cfg.editor.min_typed_share if card.role == "generative" else None
+        d["max_span_chars"] = self.cfg.editor.max_span_chars
         d["can_submit"], d["blocked_reason"] = card.can_submit()
         d["send_back_needs_reason"] = self.cfg.editor.send_back_needs_reason
         return d
@@ -244,7 +329,9 @@ class SessionManager:
         if state.page not in ("task", "submit"):
             raise PortalError("The card is not open on this page.", 409)
 
-    def card_action(self, pid: str, action: str, span_id: str = "", reason: str = "", field: str = "", text: str = "") -> dict:
+    def card_action(self, pid: str, action: str, span_id: str = "", reason: str = "", field: str = "", text: str = "", pasted: bool = False) -> dict:
+        fid = ""
+        span = None
         with self.lock(pid):
             state = self.tick(pid)
             self._require_card_page(state)
@@ -255,10 +342,10 @@ class SessionManager:
                     self._log_card_events(state, [evt])
                     self._save_card(state, card)
                     self.save(state)
-                    if action == "send_back":
-                        self._revise_after_send_back(state, card, fid, span, reason)
                 elif action == "type":
-                    evts = card.set_field_text(field, text, self.cfg.editor.max_span_chars)
+                    if not self.cfg.editor.allow_paste and pasted:
+                        raise PortalError("Pasting is not allowed on this card.", 400)
+                    evts = card.set_field_text(field, text, self.cfg.editor.max_span_chars, pasted=pasted)
                     self._log_card_events(state, evts)
                     self._save_card(state, card)
                     self.save(state)
@@ -272,44 +359,59 @@ class SessionManager:
             except CardError as exc:
                 raise PortalError(str(exc), 400)
             self.touch(state)
+
+        if action == "send_back" and fid and span:
+            self._revise_after_send_back(pid, fid, span, reason)
+
+        with self.lock(pid):
+            state = self.get(pid)
             return self.card_view(state, self.card(state))
 
-    def _revise_after_send_back(self, state: SessionState, card: Card, field_id: str, span, reason: str) -> None:
+    def _revise_after_send_back(self, pid: str, field_id: str, span, reason: str) -> None:
         """A sent-back span goes back to the specialist who wrote it, who writes a replacement."""
-        cid = self.sm.client_id(state)
-        if state.page != "task" or self.sm.task_mode(state) != "team" or span.author not in self.cfg.specialist_names:
-            return
-        log = self.logger(state)
-        client = self.cfg.clients[cid]
-        agent = SpecialistAgent(self.cfg, self.cfg.specialist(span.author), client, self.llm)
-        agent.on_error = self._on_error(state, cid)
-        transcript = self.store.transcript(state.pid, cid)
+        with self.lock(pid):
+            state = self.check_active(pid)
+            cid = self.sm.client_id(state)
+            if state.page != "task" or self.sm.task_mode(state) != "team" or span.author not in self.cfg.specialist_names:
+                return
+            client = self.cfg.clients[cid]
+            agent = SpecialistAgent(self.cfg, self.cfg.specialist(span.author), client, self.llm)
+            agent.on_error = self._on_error(state, cid)
+            transcript = self.store.transcript(state.pid, cid)
+
         try:
             res = agent.reply(transcript, Trigger("revise", "Participant", "", {"field": field_id, "old_text": span.text, "reason": reason}))
         except AgentCallFailed:
             return
-        if res.output.card_proposal:
-            new, evt = card.add_ai_text(field_id, res.output.card_proposal.text, span.author, replaces=span.span_id)
-            self._log_card_events(state, [evt])
-            self._save_card(state, card)
-            self.save(state)
-            log.log("agent_reply", "task", cid, agent=span.author, in_reply_to=span.span_id, text=res.output.card_proposal.text,
-                    latency_first_token_ms=res.llm.first_token_ms, latency_total_ms=res.llm.total_ms,
-                    tokens_in=res.llm.tokens_in, tokens_out=res.llm.tokens_out, disclosed_items=res.output.disclosed_hidden_items,
-                    asked_for=False, declined=False, redirected_to=None, revision=True)
-            self._mark_dirty(state, cid)
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                return
+            card = self.card(state)
+            if res.output.card_proposal:
+                new, evt = card.add_ai_text(field_id, res.output.card_proposal.text, span.author, replaces=span.span_id)
+                self._log_card_events(state, [evt])
+                self._save_card(state, card)
+                self.save(state)
+                self.logger(state).log("agent_reply", "task", cid, agent=span.author, in_reply_to=span.span_id, text=res.output.card_proposal.text,
+                        latency_first_token_ms=res.llm.first_token_ms, latency_total_ms=res.llm.total_ms,
+                        tokens_in=res.llm.tokens_in, tokens_out=res.llm.tokens_out, disclosed_items=res.output.disclosed_hidden_items,
+                        asked_for=False, declined=False, redirected_to=None, revision=True)
+                self._mark_dirty(state, cid)
 
     def card_submit(self, pid: str) -> SessionState:
         with self.lock(pid):
             state = self.tick(pid)
             if state.page not in ("task", "submit"):
                 raise PortalError("Nothing to submit here.", 409)
-            if state.page == "task":
-                self.sm.advance(state, self.logger(state), reason="participant")   # to submit
             card = self.card(state)
             ok, why = card.can_submit()
             if not ok:
                 raise PortalError(self.cfg.text("task.submit_blocked_share", min=int(self.cfg.editor.min_typed_share * 100)), 409)
+            if state.page == "task":
+                self.sm.advance(state, self.logger(state), reason="participant")   # to submit
             cid = state.client_order[state.client_index]
             cj = card.to_json()
             self.logger(state).log("card_submit", "submit", cid, full_card_json=cj, typed_share=cj["typed_share"],
@@ -329,22 +431,28 @@ class SessionManager:
                 continue
             it = dict(it)
             if it["type"] == "specialists":
-                it["options"] = list(self.cfg.specialist_names) + list(it.get("extra_options", []))
+                opts = list(state.specialist_order) + list(it.get("extra_options", []))
+                it["options"] = opts
+                it["options_order"] = opts
             items.append(it)
         return items
 
     def checkin_submit(self, pid: str, answers: dict[str, Any], durations: dict[str, Any] | None = None) -> SessionState:
+        if not isinstance(answers, dict):
+            raise PortalError("Answers must be a JSON object.", 400)
         with self.lock(pid):
             state = self.tick(pid)
             if state.page != "checkin":
                 raise PortalError("Not on the check-in page.", 409)
             items = self.checkin_items(state)
-            durations = durations or {}
+            durations = durations if isinstance(durations, dict) else {}
             for it in items:
                 v = answers.get(it["id"])
                 if v in (None, ""):
                     raise PortalError(self.cfg.text("checkin.missing"), 400)
                 if it["type"] == "scale":
+                    if isinstance(v, bool):
+                        raise PortalError("invalid answer", 400)
                     try:
                         iv = int(v)
                     except (TypeError, ValueError):
@@ -357,9 +465,15 @@ class SessionManager:
             cid = self.sm.client_id(state)
             total_ms = int((self.clock() - state.checkin_started) * 1000)
             for it in items:
-                ms = durations.get(it["id"])
-                log.log("checkin_answer", "checkin", cid, item_id=it["id"], value=answers[it["id"]],
-                        duration_ms=int(ms) if isinstance(ms, (int, float)) else total_ms // max(1, len(items)))
+                raw_ms = durations.get(it["id"])
+                if isinstance(raw_ms, (int, float)) and not isinstance(raw_ms, bool):
+                    bounded_ms = max(0, min(3_600_000, int(raw_ms)))
+                else:
+                    bounded_ms = total_ms // max(1, len(items))
+                meta = {"item_id": it["id"], "value": answers[it["id"]], "duration_ms": bounded_ms}
+                if "options" in it:
+                    meta["options_order"] = it["options"]
+                log.log("checkin_answer", "checkin", cid, **meta)
             self.sm.advance(state, log, reason="submitted")
             return state
 
@@ -435,25 +549,31 @@ class SessionManager:
     def _failure_line(self, state: SessionState, cid: str, name: str) -> dict:
         return self._msg(state, cid, "System", ["everyone"], self.cfg.text("task.agent_failed", name=name), kind="system")
 
-    def _run_burst(self, state: SessionState, cid: str, assignments: list, specs: dict[str, SpecialistAgent],
+    def _run_burst(self, pid: str, cid: str, assignments: list, specs: dict[str, SpecialistAgent],
                    draft_card: bool = False) -> Iterator[dict]:
         """One orchestrator burst: assignments + specialist replies, all in ONE folded block."""
-        chat = self._chat(state, cid)
-        if not assignments and not draft_card:
-            return
-        chat["block_seq"] += 1
-        block_id = f"blk_{chat['block_seq']:02d}"
-        orch = self.cfg.orchestrator_name
-        sent: dict[str, dict] = {}
-        for a in assignments:
-            m = self._msg(state, cid, orch, [a.to], a.text, kind="internal", block_id=block_id)
-            sent[a.to] = m
-            self.logger(state).log("orch_message", "task", cid, to_agent=a.to, text=a.text, block_id=block_id)
-            if a.to not in chat["asked"]:
-                chat["asked"].append(a.to)
-            yield {"type": "message", "message": m}
-        targets = [s.name for s in self.cfg.specialists if s.name in sent or draft_card]
-        snapshot = self.store.transcript(state.pid, cid)
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                return
+            chat = self._chat(state, cid)
+            if not assignments and not draft_card:
+                return
+            chat["block_seq"] += 1
+            block_id = f"blk_{chat['block_seq']:02d}"
+            orch = self.cfg.orchestrator_name
+            sent: dict[str, dict] = {}
+            for a in assignments:
+                m = self._msg(state, cid, orch, [a.to], a.text, kind="internal", block_id=block_id)
+                sent[a.to] = m
+                self.logger(state).log("orch_message", "task", cid, to_agent=a.to, text=a.text, block_id=block_id)
+                if a.to not in chat["asked"]:
+                    chat["asked"].append(a.to)
+                yield {"type": "message", "message": m}
+            targets = [s.name for s in self.cfg.specialists if s.name in sent or draft_card]
+            snapshot = self.store.transcript(state.pid, cid)
+            self.save(state)
 
         def call(name: str):
             kind = "draft_card" if draft_card else "orchestrator"
@@ -463,22 +583,31 @@ class SessionManager:
             except AgentCallFailed:
                 return name, None
 
-        for name, res in list(_POOL.map(call, targets)):
-            if res is None:
-                yield {"type": "message", "message": self._failure_line(state, cid, name)}
-                continue
-            self._apply_proposal(state, name, res)
-            text = res.output.reply_text
-            in_reply = sent[name]["id"] if name in sent else ""
-            if text:
-                m = self._msg(state, cid, name, [orch], text, kind="internal", block_id=block_id,
-                              disclosed=res.output.disclosed_hidden_items)
-                self._log_reply(state, cid, name, in_reply, res, text)
-                if name not in chat["contributed"]:
-                    chat["contributed"].append(name)
-                yield {"type": "message", "message": m}
-        self._mark_dirty(state, cid)
-        yield {"type": "card", "card": self.card_view(state)}
+        results = list(_POOL.map(call, targets))
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                return
+            chat = self._chat(state, cid)
+            for name, res in results:
+                if res is None:
+                    yield {"type": "message", "message": self._failure_line(state, cid, name)}
+                    continue
+                self._apply_proposal(state, name, res)
+                text = res.output.reply_text
+                in_reply = sent[name]["id"] if name in sent else ""
+                if text:
+                    m = self._msg(state, cid, name, [orch], text, kind="internal", block_id=block_id,
+                                  disclosed=res.output.disclosed_hidden_items)
+                    self._log_reply(state, cid, name, in_reply, res, text)
+                    if name not in chat["contributed"]:
+                        chat["contributed"].append(name)
+                    yield {"type": "message", "message": m}
+            self._mark_dirty(state, cid)
+            self.save(state)
+            yield {"type": "card", "card": self.card_view(state)}
 
     def chat_open(self, pid: str) -> Iterator[dict]:
         """Opening coordination burst when the task page is first shown for a client."""
@@ -488,21 +617,37 @@ class SessionManager:
             chat = self._chat(state, cid)
             if chat["opened"]:
                 return
+            specs, orch = self._agents(state, cid)
+            snapshot = self.store.transcript(pid, cid)
+
+        try:
+            out, _ = orch.plan(snapshot, "opening")
+        except AgentCallFailed:
+            with self.lock(pid):
+                state = self.check_active(pid)
+                yield {"type": "message", "message": self._failure_line(state, cid, self.cfg.orchestrator_name)}
+            return
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                return
+            chat = self._chat(state, cid)
             chat["opened"] = True
             self.save(state)
-            specs, orch = self._agents(state, cid)
-            try:
-                out, _ = orch.plan(self.store.transcript(pid, cid), "opening")
-            except AgentCallFailed:
-                yield {"type": "message", "message": self._failure_line(state, cid, self.cfg.orchestrator_name)}
-                out = None
-            if out:
-                yield from self._run_burst(state, cid, out.assignments, specs, draft_card=out.draft_card or True)
-            self.save(state)
-            panel = self.refresh_panel(state, cid, force=True)
-            if panel:
-                yield {"type": "panel", "panel": panel}
-            self.save(state)
+
+        if out:
+            yield from self._run_burst(pid, cid, out.assignments, specs, draft_card=True)
+
+        panel = None
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page == "task" and self.sm.client_id(state) == cid and self.sm.task_remaining(state) > 0:
+                panel = self.refresh_panel(state, cid, force=True)
+                self.save(state)
+        if panel:
+            yield {"type": "panel", "panel": panel}
 
     def chat_send(self, pid: str, text: str) -> Iterator[dict]:
         text = (text or "").strip()
@@ -528,34 +673,43 @@ class SessionManager:
             specs, orch = self._agents(state, cid)
             snapshot = self.store.transcript(pid, cid)
             orch_name = self.cfg.orchestrator_name
+            self.save(state)
 
-            def spec_call(name: str, kind: str):
-                try:
-                    return name, specs[name].reply(snapshot, Trigger(kind, "Participant", text))
-                except AgentCallFailed:
-                    return name, None
+        def spec_call(name: str, kind: str):
+            try:
+                return name, specs[name].reply(snapshot, Trigger(kind, "Participant", text))
+            except AgentCallFailed:
+                return name, None
 
-            def orch_call(kind: str):
-                try:
-                    return orch.plan(snapshot, kind, text)[0]
-                except AgentCallFailed:
-                    return None
+        def orch_call(kind: str):
+            try:
+                return orch.plan(snapshot, kind, text)[0]
+            except AgentCallFailed:
+                return None
 
-            plan_out = None
-            if route.kind == "broadcast":
-                fut = _POOL.submit(orch_call, "broadcast")
-                results = list(_POOL.map(lambda n: spec_call(n, "broadcast"), self.cfg.specialist_names))
+        plan_out = None
+        if route.kind == "broadcast":
+            fut = _POOL.submit(orch_call, "broadcast")
+            results = list(_POOL.map(lambda n: spec_call(n, "broadcast"), self.cfg.specialist_names))
+            plan_out = fut.result()
+        else:
+            spec_targets = [a for a in route.addressees if a != orch_name]
+            fut = _POOL.submit(orch_call, "mention") if orch_name in route.addressees else None
+            results = list(_POOL.map(lambda n: spec_call(n, "mention"), spec_targets))
+            if fut:
                 plan_out = fut.result()
-                if plan_out is None:
-                    yield {"type": "message", "message": self._failure_line(state, cid, orch_name)}
-            else:
-                spec_targets = [a for a in route.addressees if a != orch_name]
-                fut = _POOL.submit(orch_call, "mention") if orch_name in route.addressees else None
-                results = list(_POOL.map(lambda n: spec_call(n, "mention"), spec_targets))
-                if fut:
-                    plan_out = fut.result()
-                    if plan_out is None:
-                        yield {"type": "message", "message": self._failure_line(state, cid, orch_name)}
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                return
+            chat = self._chat(state, cid)
+            if route.kind == "broadcast" and plan_out is None:
+                yield {"type": "message", "message": self._failure_line(state, cid, orch_name)}
+            elif route.kind != "broadcast" and orch_name in route.addressees and plan_out is None:
+                yield {"type": "message", "message": self._failure_line(state, cid, orch_name)}
+
             # specialists' public replies (never folded)
             for name, res in results:
                 if res is None:
@@ -572,20 +726,26 @@ class SessionManager:
                         if name not in lst:
                             lst.append(name)
                     yield {"type": "message", "message": m}
-            # orchestrator: direct reply (never folded) and then any assignment burst (folded)
-            if plan_out:
-                if plan_out.to_participant:
-                    m = self._msg(state, cid, orch_name, ["Participant"], plan_out.to_participant, in_reply_to=msg["id"])
-                    yield {"type": "message", "message": m}
-                yield from self._run_burst(state, cid, plan_out.assignments, specs)
-            self._mark_dirty(state, cid)
+
+            if plan_out and plan_out.to_participant:
+                m = self._msg(state, cid, orch_name, ["Participant"], plan_out.to_participant, in_reply_to=msg["id"])
+                yield {"type": "message", "message": m}
             self.save(state)
-            yield {"type": "card", "card": self.card_view(state)}
-            panel = self.refresh_panel(state, cid)
-            if panel:
-                yield {"type": "panel", "panel": panel}
-            self.save(state)
-            self.touch(state)
+
+        if plan_out and plan_out.assignments:
+            yield from self._run_burst(pid, cid, plan_out.assignments, specs)
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page == "task" and self.sm.client_id(state) == cid and self.sm.task_remaining(state) > 0:
+                self._mark_dirty(state, cid)
+                self.save(state)
+                yield {"type": "card", "card": self.card_view(state)}
+                panel = self.refresh_panel(state, cid)
+                if panel:
+                    yield {"type": "panel", "panel": panel}
+                self.save(state)
+                self.touch(state)
 
     # ------------------------------------------------------------------ panel
     def _team_status(self, state: SessionState, cid: str) -> str:
@@ -646,10 +806,11 @@ class SessionManager:
         chat.update(panel_last_at=now, panel_dirty=False, panel_text=res.text, panel_words=res.word_count,
                     panel_sections=res.sections_present)
         if changed:
-            self.store.add_panel(state.pid, cid, cond.panel_level, res.text, res.word_count, res.sections_present)
+            self.store.add_panel(state.pid, cid, cond.panel_level, res.text, res.word_count, res.sections_present,
+                                 validation_errors=res.validation_errors, retried=res.retried, truncated=res.truncated)
             self.logger(state).log("panel_shown", "task", cid, level=cond.panel_level, text=res.text,
                                    word_count=res.word_count, sections_present=res.sections_present,
-                                   guardrail_retry=res.retried, truncated=res.truncated)
+                                   retried=res.retried, truncated=res.truncated, validation_errors=res.validation_errors)
         return self._panel_view(state, cid)
 
     def panel_poll(self, pid: str) -> dict | None:

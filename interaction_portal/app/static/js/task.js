@@ -66,21 +66,29 @@
 
   /* ---- team chat ---------------------------------------------------------------------------------------- */
   if (T.mode !== "team") return;
-  const chat = Chat.create({
-    log: $("chat-log"), input: $("chat-text"), sendBtn: $("chat-send"), pop: $("mention-pop"),
-    warn: $("chat-warn"), typing: $("chat-typing"), agents: T.agents, orchestrator: T.orchestrator,
-    orchestratorRole: T.orchestratorRole, agentNames: T.agentNames, delay: T.typingDelay, you: "You",
-    onSend: async (text, c) => {
-      return c.stream("/api/chat/send", { text: text }, handlers);
-    },
-  });
+  let participantMsgSent = false;
   const handlers = {
-    message: (ev) => chat.add(ev.message, ev.message.sender !== "Participant"),
+    message: (ev) => {
+      if (ev.message && ev.message.sender === "Participant") {
+        participantMsgSent = true;
+      }
+      chat.add(ev.message, ev.message.sender !== "Participant");
+    },
     card: (ev) => editor.update(ev.card),
     panel: (ev) => renderPanel(ev.panel),
     warning: (ev) => chat.warn(ev.text),
     error: (ev) => chat.warn(ev.text),
   };
+  const chat = Chat.create({
+    log: $("chat-log"), input: $("chat-text"), sendBtn: $("chat-send"), pop: $("mention-pop"),
+    warn: $("chat-warn"), typing: $("chat-typing"), agents: T.agents, orchestrator: T.orchestrator,
+    orchestratorRole: T.orchestratorRole, agentNames: T.agentNames, delay: T.typingDelay, you: "You",
+    onSend: async (text, c) => {
+      participantMsgSent = false;
+      const ok = await c.stream("/api/chat/send", { text: text }, handlers);
+      return ok && participantMsgSent;
+    },
+  });
 
   (async function init() {
     const st = await Portal.get("/api/chat/state");

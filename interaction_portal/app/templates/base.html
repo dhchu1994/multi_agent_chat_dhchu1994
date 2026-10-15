@@ -5,6 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
   <link rel="stylesheet" href="/static/css/portal.css">
+  <script>
+    (function() {
+      try {
+        var pid = "{{ pid|default('') }}";
+        if (!pid) {
+          var m = window.location.pathname.match(/\/session\/([^\/]+)/);
+          if (m) pid = m[1];
+          else {
+            var q = new URLSearchParams(window.location.search).get("pid");
+            if (q) pid = q;
+          }
+        }
+        var pref = null;
+        if (pid) {
+          pref = localStorage.getItem("portal_theme_" + pid);
+        }
+        if (!pref) {
+          pref = localStorage.getItem("portal_theme_global");
+        }
+        if (!pref) {
+          pref = "system";
+        }
+        var isDark = false;
+        if (pref === "dark") {
+          isDark = true;
+        } else if (pref === "system") {
+          isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        }
+        if (isDark) {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.classList.add("theme-dark");
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
+          document.documentElement.classList.add("theme-light");
+        }
+        document.documentElement.setAttribute("data-theme-preference", pref);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="page-{{ page|default('entry') }}"
       data-pid="{{ pid|default('') }}" data-page="{{ page|default('') }}"
@@ -13,7 +52,21 @@
 <div class="shell {% block shell_class %}{% endblock %}">
   <div class="topbar">
     <div class="left">{% block header_left %}{% endblock %}</div>
-    <div class="right">{% block header_right %}{% endblock %}</div>
+    <div class="right">
+      {% block header_right %}{% endblock %}
+      <div id="theme-control" class="theme-switcher">
+        <button id="theme-btn" class="theme-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Change theme">
+          <span class="theme-btn-icon">🌓</span>
+          <span class="theme-btn-text">Theme</span>
+          <span class="theme-btn-arrow">▾</span>
+        </button>
+        <div id="theme-dropdown" class="theme-dropdown hidden" role="menu">
+          <button type="button" class="theme-option" data-theme="system" role="menuitem">System (default)</button>
+          <button type="button" class="theme-option" data-theme="light" role="menuitem">Light</button>
+          <button type="button" class="theme-option" data-theme="dark" role="menuitem">Dark</button>
+        </div>
+      </div>
+    </div>
   </div>
   {% block body %}{% endblock %}
 </div>

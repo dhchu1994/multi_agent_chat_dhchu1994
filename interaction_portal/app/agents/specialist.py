@@ -9,6 +9,7 @@ from typing import Any
 from ..config_loader import ClientConfig, PortalConfig, SpecialistConfig
 from . import topics
 from .base import LLMClient, LLMResult, call_with_retry, format_transcript
+from .disclosure import detect_disclosure
 from .schemas import CardProposal, SpecialistOutput, extract_json
 
 
@@ -73,7 +74,8 @@ class SpecialistAgent:
             ins = (f"The orchestrator assigned you this: \"{t.text}\"\nReply to the orchestrator in one or two sentences, "
                    "from the public brief and what has already been said in the chat. Do not volunteer items from your private material.")
         elif t.kind == "draft_card":
-            ins = ("Draft the card field(s) you cover as a card_proposal from the public brief and what the chat has "
+            assign = f"The orchestrator asked you: \"{t.text}\".\n" if t.text else ""
+            ins = (f"{assign}Draft the card field(s) you cover as a card_proposal from the public brief and what the chat has "
                    "established. Do not volunteer anything from your private material that has not been asked about.")
         elif t.kind == "revise":
             ins = (f"The participant sent back your card text for field \"{t.extra.get('field')}\": \"{t.extra.get('old_text')}\". "
@@ -105,4 +107,30 @@ class SpecialistAgent:
         if out.card_proposal:
             out.card_proposal = CardProposal(field=out.card_proposal.field, text=out.card_proposal.text.strip()[: self.cfg.editor.max_span_chars])
         asked = topics.asked_about_hidden(self.spec, trigger.text) if trigger.kind in ("broadcast", "mention") else False
+
+        # Guardrail: check for unprompted disclosure of hidden material
+        if not asked and self.private.hidden_passages:
+            detected = detect_disclosure(out.reply_text, self.private.hidden_passages)
+            if detected:
+                leak_str = ", ".join(detected)
+                strict_user = user + f"\n\nCRITICAL: In your previous draft you disclosed hidden/private material ({leak_str}) without being asked. Answer WITHOUT mentioning {leak_str} or private constraints."
+                try:
+                    def retry_run() -> tuple[SpecialistOutput, LLMResult]:
+                        r_res = self.llm.complete(system, strict_user, temperature=self.cfg.llm.specialist_temperature,
+                                                  max_tokens=self.cfg.llm.specialist_max_tokens, json_mode=True, meta=meta)
+                        return SpecialistOutput.model_validate(extract_json(r_res.text)), r_res
+                    out2, res2 = call_with_retry(self.llm, self.name, retry_run, 1)
+                    out2.reply_text = clean_reply(out2.reply_text, self.name, self.cfg.all_agent_names)
+                    detected2 = detect_disclosure(out2.reply_text, self.private.hidden_passages)
+                    if not detected2:
+                        out = out2
+                        res = res2
+                        out.disclosed_hidden_items = [h for h in out.disclosed_hidden_items if h in self.private.hidden_items]
+                    else:
+                        out.reply_text = "I don't have enough information on that yet."
+                        out.disclosed_hidden_items = []
+                except Exception:
+                    out.reply_text = "I don't have enough information on that yet."
+                    out.disclosed_hidden_items = []
+
         return SpecialistResult(out, res, asked)

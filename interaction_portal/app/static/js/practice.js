@@ -125,6 +125,7 @@
         if (r.error) { c.warn(r.error); return false; }
         (r.messages || []).forEach((m) => addMsg(m, true));
         await refresh();
+        if (r.warning && (!r.messages || !r.messages.length)) return false;
         return !!r.ok;
       },
     });

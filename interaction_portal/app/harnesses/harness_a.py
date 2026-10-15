@@ -474,7 +474,7 @@ def run_harness_a(
 ) -> tuple[bool, dict[str, Any]]:
     cfg = load_config(config_path)
     if provider:
-        cfg.llm.provider = provider
+        cfg.set_provider(provider)
 
     store = EventStore(cfg.db_path)
     client_ids = list(cfg.clients.keys()) if client_id.lower() == "all" else [client_id]
@@ -515,7 +515,7 @@ def main() -> None:
     parser.add_argument("--config", default=None, help="Path to config.yaml (optional)")
     parser.add_argument("--client", default="C1", help="Client ID to test (e.g. C1, or 'all')")
     parser.add_argument("--output", default="harness_a_report.json", help="Report output path")
-    parser.add_argument("--provider", default=None, help="Override LLM provider (mock or openai)")
+    parser.add_argument("--provider", default=None, help="Override LLM provider (mock, openai, claude, deepseek, glm, qwen)")
     args = parser.parse_args()
 
     passed, _ = run_harness_a(

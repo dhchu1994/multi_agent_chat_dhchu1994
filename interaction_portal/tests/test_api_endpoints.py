@@ -49,7 +49,26 @@ def test_admin_export_token_protection(client_env):
     assert res_header.status_code == 200
     assert "pid,timestamp" in res_header.text
 
-    # With valid token query param: 200 OK
+    # With Bearer token header: 200 OK
+    res_bearer = client.get("/admin/export/all.json", headers={"Authorization": "Bearer secret-test-token"})
+    assert res_bearer.status_code == 200
+    assert "sessions" in res_bearer.json()
+
+    # Query param token MUST be rejected per B15: 403 Forbidden
     res_query = client.get("/admin/export/all.json?token=secret-test-token")
-    assert res_query.status_code == 200
-    assert "sessions" in res_query.json()
+    assert res_query.status_code == 403
+
+
+def test_verify_and_health_endpoints(client_env):
+    cfg, store, client = client_env
+    # Verify endpoint
+    res = client.get("/verify?code=NONEXISTENT")
+    assert res.status_code == 404
+
+    # Admin health endpoint
+    res_h = client.get("/admin/health", headers={"x-admin-token": "secret-test-token"})
+    assert res_h.status_code == 200
+    data = res_h.json()
+    assert data["status"] == "healthy"
+    assert data["db_ok"] is True
+    assert "config_hash" in data

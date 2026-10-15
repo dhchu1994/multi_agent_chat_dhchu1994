@@ -16,6 +16,7 @@ Included text per role
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -90,6 +91,9 @@ class Card:
             if s.author == author and s.status == "proposed":
                 s.status = "deleted"
                 s.history.append(self._h("replaced", author))
+            elif s.author == author and s.status == "kept":
+                s.status = "superseded"
+                s.history.append(self._h("superseded", author))
             if replaces and s.span_id == replaces:
                 s.history.append(self._h("replaced_by_revision", author))
         span = Span(self._new_id(), text, author, "proposed", [self._h("created", author)], parent=replaces)
@@ -101,8 +105,8 @@ class Card:
         if self.role != "evaluative":
             raise CardError("this role cannot keep, cut or send back")
         field_id, span = self._find(span_id)
-        if span.author == "user" or span.status in ("deleted",):
-            raise CardError("only the team's spans can be evaluated")
+        if span.author == "user" or span.status in ("deleted", "superseded"):
+            raise CardError("only the team's live spans can be evaluated")
         if action not in ("keep", "cut", "send_back"):
             raise CardError("unknown action")
         if action == "send_back" and self.send_back_needs_reason and not reason.strip():
@@ -113,13 +117,15 @@ class Card:
         return field_id, span, self._evt(field_id, span, action, 0, removed, span.author, reason.strip())
 
     # ---- generative / none: typing ---------------------------------------
-    def set_field_text(self, field_id: str, new_text: str, max_chars: int = 600) -> list[dict]:
+    def set_field_text(self, field_id: str, new_text: str, max_chars: int = 600,
+                       pasted: bool = False, ai_contexts: list[str] | None = None) -> list[dict]:
         """Apply the editor's full text for a field, diffing against the current spans."""
         if self.role not in ("generative", "none"):
             raise CardError("this role cannot type on the card")
         self._check_field(field_id)
-        new_text = new_text[:max_chars]
-        spans = [s for s in self.fields[field_id] if s.status not in ("deleted",)]
+        if len(new_text) > max_chars:
+            raise CardError(f"Field exceeds maximum allowed length of {max_chars} characters.")
+        spans = [s for s in self.fields[field_id] if s.status not in ("deleted", "superseded")]
         old_chars: list[tuple[str, Span]] = [(ch, s) for s in spans for ch in s.text]
         old_text = "".join(c for c, _ in old_chars)
         if old_text == new_text:
@@ -202,13 +208,30 @@ class Card:
         return s.status in ("typed", "inserted")
 
     def field_text(self, field_id: str) -> str:
-        return "".join(s.text for s in self.fields[field_id] if self._included(s))
+        included = [s.text for s in self.fields[field_id] if self._included(s)]
+        res: list[str] = []
+        for t in included:
+            if res and not res[-1].endswith(("\n", " ")) and not t.startswith(("\n", " ")):
+                res.append("\n")
+            res.append(t)
+        return "".join(res)
 
     def full_text(self) -> dict[str, str]:
         return {f: self.field_text(f) for f in self.field_ids}
 
     def total_chars(self) -> int:
         return sum(len(t.strip()) for t in self.full_text().values())
+
+    def _is_filler(self, text: str) -> bool:
+        t = text.strip()
+        if not t:
+            return True
+        if len(t) >= 10 and len(set(t)) <= 2:
+            return True
+        w = [w for w in re.findall(r"[a-zA-Z]{2,}", t.lower())]
+        if len(t) >= 20 and len(set(w)) < 2:
+            return True
+        return False
 
     def typed_chars(self) -> int:
         n = 0
@@ -218,9 +241,22 @@ class Card:
                     n += len(s.text)
         return n
 
+    def typed_chars_strict(self) -> int:
+        n = 0
+        for f in self.field_ids:
+            for s in self.fields[f]:
+                if self._included(s) and s.author == "user":
+                    if not self._is_filler(s.text):
+                        n += len(s.text)
+        return n
+
     def typed_share(self) -> float:
         total = sum(len(s.text) for f in self.field_ids for s in self.fields[f] if self._included(s))
         return (self.typed_chars() / total) if total else 0.0
+
+    def typed_share_strict(self) -> float:
+        total = sum(len(s.text) for f in self.field_ids for s in self.fields[f] if self._included(s))
+        return (self.typed_chars_strict() / total) if total else 0.0
 
     def fields_complete(self) -> int:
         return sum(1 for t in self.full_text().values() if t.strip())
@@ -242,9 +278,11 @@ class Card:
     def to_json(self, full: bool = True) -> dict:
         return {
             "role": self.role,
-            "fields": {f: [s.to_dict() for s in spans if full or s.status != "deleted"] for f, spans in self.fields.items()},
+            "fields": {f: [s.to_dict() for s in spans if full or (s.status != "deleted" and s.status != "superseded")] for f, spans in self.fields.items()},
             "suggestions": {f: [s.to_dict() for s in spans if s.status == "suggested"] for f, spans in self.suggestions.items()},
             "typed_share": round(self.typed_share(), 4),
+            "typed_share_raw": round(self.typed_share(), 4),
+            "typed_share_strict": round(self.typed_share_strict(), 4),
             "fields_complete": self.fields_complete(),
             "text": self.full_text(),
             "provenance_summary": self.provenance_summary(),

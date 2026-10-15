@@ -19,7 +19,7 @@ study_title: "Interaction Portal"
 # standalone_mode: false -> production: pid and condition are mandatory and the
 #                           participant is redirected to Qualtrics at the end.
 # Every value can be overridden by an environment variable (PORTAL_STANDALONE=1|0,
-# PORTAL_LLM_PROVIDER=mock|openai, PORTAL_TIMER_SCALE=0.05, ...).
+# PORTAL_LLM_PROVIDER=mock|openai|claude|deepseek|glm|qwen, PORTAL_TIMER_SCALE=0.05, ...).
 testing:
   standalone_mode: true
   # Divide every server timer and minimum reading time by this factor (1 = real time).
@@ -33,7 +33,7 @@ testing:
 # Server
 # ---------------------------------------------------------------------------
 server:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 8000
   # Signs the session cookie. Override with PORTAL_SECRET_KEY in production.
   secret_key: "change-me-in-production"
@@ -41,16 +41,24 @@ server:
 
 # ---------------------------------------------------------------------------
 # Model provider. One pinned model version for all five agents and the panel.
-# The API key is read from the environment variable named in api_key_env and is
-# never stored in this file.
+# The API key is read from the environment variable named in api_key_env (or
+# provider fallback env vars: ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, ZAI_API_KEY,
+# DASHSCOPE_API_KEY, etc.) and is never stored in this file.
+#
+# Supported providers:
+#   mock     = deterministic offline model (no network, zero keys). Default.
+#   openai   = OpenAI / ChatGPT (OPENAI_API_KEY, default model: gpt-5.4-mini, base_url: https://api.openai.com/v1)
+#   claude   = Anthropic Claude (ANTHROPIC_API_KEY, default model: claude-haiku-5-5, base_url: https://api.anthropic.com)
+#   deepseek = DeepSeek (DEEPSEEK_API_KEY, default model: deepseek-flash, base_url: https://api.deepseek.com)
+#   glm      = GLM / Z.ai, formerly Zhipu AI (ZAI_API_KEY, default model: glm-5.3-flash, base_url: https://api.z.ai/api/paas/v4)
+#   qwen     = Alibaba Cloud Model Studio / DashScope (DASHSCOPE_API_KEY, default model: qwen3.8-flash,
+#              base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
 # ---------------------------------------------------------------------------
 llm:
-  # mock   = deterministic offline model (no network, no key). Used for tests.
-  # openai = any OpenAI-compatible chat-completions endpoint.
   provider: "mock"
-  base_url: "https://api.openai.com/v1"
-  api_key_env: "OPENAI_API_KEY"
-  model: "gpt-4o-mini-2024-07-18"       # pinned; changing it means rerunning both harnesses
+  base_url: "https://api.openai.com/v1" # automatically adjusts if provider is set to claude/deepseek/glm/qwen
+  api_key_env: "OPENAI_API_KEY"         # automatically checks provider env vars (ZAI_API_KEY, etc.)
+  model: "gpt-5.4-mini"                 # pinned; default model adapts per provider
   timeout_seconds: 60
   retries: 1                            # one automatic retry, then a neutral chat line
   specialist_temperature: 0.3
@@ -59,6 +67,9 @@ llm:
   specialist_max_tokens: 400
   orchestrator_max_tokens: 300
   panel_max_tokens: 220
+  supports_stream_usage: true
+  token_param: "max_tokens"
+  send_temperature: true
   # Simulated typing: seconds between characters revealed in the chat bubble (display only).
   live_typing_delay: 0.012
 
@@ -101,6 +112,7 @@ editor:
   send_back_needs_reason: true
   min_typed_share: 0.25            # generative: share of submitted characters typed by the participant
   max_span_chars: 600
+  allow_paste: true
 
 # ---------------------------------------------------------------------------
 # Orchestrator panel
@@ -206,12 +218,12 @@ pages:
     intro_ai: "You run a one-person company. Your team is four AI specialists and an AI orchestrator that assigns the work among them. Each specialist holds information the others cannot see, so no one of them can do a task alone."
     intro_noai: "You run a one-person company. You will do a series of short client tasks on your own, working from a reference pack of client material."
     rows_ai:
-      - ["Six clients", "A new client each task. Ten minutes each, with a short break halfway."]
+      - ["Seven clients", "Seven clients: six with the team, the last one alone. Ten minutes each, with a short break halfway."]
       - ["Work through chat", "One conversation with everyone in it. Message the whole team, or one teammate, by typing @ and their name."]
       - ["Short check-in", "After each task you answer five quick questions. Under a minute."]
       - ["One card per client", "The same five-field recommendation card every time. The last one you do alone, without the team."]
     rows_noai:
-      - ["Six clients", "A new client each task. Ten minutes each, with a short break halfway."]
+      - ["Seven clients", "Seven clients: six with the team, the last one alone. Ten minutes each, with a short break halfway."]
       - ["Reference pack", "For each client you get a reference pack with four sections of client material."]
       - ["Short check-in", "After each task you answer four quick questions. Under a minute."]
       - ["One card per client", "The same five-field recommendation card every time. The last one you do alone."]
@@ -412,6 +424,7 @@ pages:
         text: "If the next client had a licensing question, who would you go to first?"
         type: specialists
         extra_options: ["Not sure"]
+        ai_only: true
       - id: ci3
         text: "How confident are you that the card you just handed in breaks none of the client's constraints?"
         type: choice

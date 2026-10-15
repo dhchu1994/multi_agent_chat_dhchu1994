@@ -206,6 +206,20 @@
       }
       return true;
     } catch (e) {
+      // Network failure / stream abort: try polling /api/chat/state to recover
+      this.warn("Reconnecting…");
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await new Promise((res) => setTimeout(res, 2000));
+        try {
+          const st = await (window.Portal ? Portal.get("/api/chat/state") : null);
+          if (st) {
+            (st.messages || []).forEach((m) => this.add(m, false));
+            if (st.panel && handlers && handlers.panel) handlers.panel({ panel: st.panel });
+            this.warn("");
+            return true;
+          }
+        } catch (err) {}
+      }
       this.warn("Connection problem. Please try again.");
       return false;
     } finally {

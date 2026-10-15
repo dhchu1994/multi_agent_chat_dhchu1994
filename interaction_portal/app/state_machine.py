@@ -55,6 +55,9 @@ class SessionState:
     chat: dict[str, dict] = field(default_factory=dict)          # client_id -> chat bookkeeping
     started_at_epoch: float = 0.0
     viewport: dict | None = None
+    version: int = 0
+    assignment_cell: int = 0
+    viewport_allowed: bool = True
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -118,16 +121,58 @@ class StateMachine:
         return max(0.0, state.break_deadline - self.clock())
 
     # ---- creation / persistence -----------------------------------------------
+    def _latin_square_order(self, cell: int) -> list[str]:
+        items = list(self.cfg.randomised_clients)
+        n = len(items)
+        if n == 0:
+            return []
+        # Williams balanced Latin square for n items
+        row = []
+        for j in range(n):
+            if j % 2 == 0:
+                idx = (cell + j // 2) % n
+            else:
+                idx = (cell + n - 1 - (j - 1) // 2) % n
+            row.append(items[idx])
+        return row
+
     def new_state(self, pid: str, condition: str, autopilot: bool = False, rng: random.Random | None = None) -> SessionState:
-        rng = rng or random.Random(uuid.uuid4().int)
-        order = list(self.cfg.randomised_clients)
-        rng.shuffle(order)
-        order.append(self.cfg.fixed_last_client)
-        spec = self.cfg.specialist_names
-        spec = rng.sample(spec, len(spec))
         now = self.clock()
-        return SessionState(pid=pid, condition=condition, autopilot=autopilot, page="orientation",
-                            client_order=order, specialist_order=spec, page_entered_at=now, started_at_epoch=now)
+        spec = list(self.cfg.specialist_names)
+        if rng is not None:
+            order = list(self.cfg.randomised_clients)
+            rng.shuffle(order)
+            cell = 0
+            spec = rng.sample(spec, len(spec))
+        else:
+            # Query count of previous assignments to assign counterbalanced cell (I11)
+            cell = 0
+            try:
+                with self.store._conn() as c:
+                    r = c.execute("SELECT count(*) as cnt FROM assignments").fetchone()
+                    cell = int(r["cnt"] or 0) % max(1, len(self.cfg.randomised_clients))
+            except Exception:
+                pass
+            order = self._latin_square_order(cell)
+            r_seed = random.Random(uuid.uuid4().int)
+            spec = r_seed.sample(spec, len(spec))
+
+        order.append(self.cfg.fixed_last_client)
+
+        try:
+            with self.store._lock, self.store._conn() as c:
+                c.execute(
+                    "INSERT INTO assignments(counter, assigned_at, pid, condition_code, client_order) VALUES (?, ?, ?, ?, ?)",
+                    (cell, utc_now_iso(), pid, condition, json.dumps(order))
+                )
+        except Exception:
+            pass
+
+        return SessionState(
+            pid=pid, condition=condition, autopilot=autopilot, page="orientation",
+            client_order=order, specialist_order=spec, page_entered_at=now, started_at_epoch=now,
+            assignment_cell=cell, version=0
+        )
 
     def completion_code_for(self, pid: str) -> str:
         secret = self.cfg.qualtrics.get("completion_code_secret", "")
@@ -135,8 +180,14 @@ class StateMachine:
         return f"{self.cfg.qualtrics.get('completion_code_prefix', 'IP')}-{digest}"
 
     def save(self, state: SessionState) -> None:
-        self.store.update_session(state.pid, state=json.dumps(state.to_json()),
-                                  last_activity=utc_now_iso())
+        state.version += 1
+        self.store.update_session(
+            state.pid,
+            expected_version=state.version - 1,
+            state=json.dumps(state.to_json()),
+            last_activity=utc_now_iso(),
+            version=state.version
+        )
 
     def load(self, pid: str) -> SessionState | None:
         row = self.store.get_session(pid)

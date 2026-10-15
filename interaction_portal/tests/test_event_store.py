@@ -77,7 +77,7 @@ def test_cards_and_exports(store):
 
     # Test CSV export
     csv_str = store.events_csv()
-    assert "pid,timestamp,client_id,page_id,event_type,autopilot,metadata" in csv_str
+    assert "pid,timestamp,received_at,client_id,page_id,event_type,autopilot,metadata" in csv_str
 
     # Test JSON exports
     cards_json = store.export_cards_json()

@@ -13,6 +13,7 @@ Environment overrides (handy for testing without Qualtrics or a model key):
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from dataclasses import dataclass, field
@@ -65,9 +66,130 @@ class EditorConfig:
     send_back_needs_reason: bool = True
     min_typed_share: float = 0.25
     max_span_chars: int = 600
+    allow_paste: bool = True
 
 
-@dataclass(frozen=True)
+PROVIDER_SPECS: dict[str, dict[str, Any]] = {
+    "mock": {
+        "canonical": "mock",
+        "aliases": ["offline", "test", "none"],
+        "base_url": "",
+        "api_key_env": "",
+        "fallback_api_key_envs": [],
+        "default_model": "mock",
+        "display_name": "Mock (Offline Deterministic)",
+    },
+    "openai": {
+        "canonical": "openai",
+        "aliases": ["chatgpt"],
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "fallback_api_key_envs": ["CHATGPT_API_KEY", "PORTAL_LLM_API_KEY"],
+        "default_model": "gpt-5.4-mini",
+        "display_name": "OpenAI / ChatGPT",
+    },
+    "claude": {
+        "canonical": "claude",
+        "aliases": ["anthropic"],
+        "base_url": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "fallback_api_key_envs": ["CLAUDE_API_KEY", "PORTAL_LLM_API_KEY"],
+        "default_model": "claude-haiku-5-5",
+        "display_name": "Anthropic Claude",
+    },
+    "deepseek": {
+        "canonical": "deepseek",
+        "aliases": [],
+        "base_url": "https://api.deepseek.com",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "fallback_api_key_envs": ["PORTAL_LLM_API_KEY"],
+        "default_model": "deepseek-flash",
+        "display_name": "DeepSeek",
+    },
+    "glm": {
+        "canonical": "glm",
+        "aliases": ["zhipu", "zhipuai", "bigmodel", "zai"],
+        "base_url": "https://api.z.ai/api/paas/v4",
+        "api_key_env": "ZAI_API_KEY",
+        "fallback_api_key_envs": ["GLM_API_KEY", "ZHIPUAI_API_KEY", "BIGMODEL_API_KEY", "PORTAL_LLM_API_KEY"],
+        "default_model": "glm-5.3-flash",
+        "display_name": "GLM (Z.ai, formerly Zhipu AI)",
+    },
+    "qwen": {
+        "canonical": "qwen",
+        "aliases": ["dashscope", "tongyi", "aliyun", "modelstudio"],
+        "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "api_key_env": "DASHSCOPE_API_KEY",
+        "fallback_api_key_envs": ["QWEN_API_KEY", "PORTAL_LLM_API_KEY"],
+        "default_model": "qwen3.8-flash",
+        "display_name": "Qwen (Alibaba Cloud Model Studio / DashScope)",
+    },
+}
+
+
+def canonical_provider(name: str) -> str:
+    """Normalize provider name string to canonical form."""
+    n = (name or "").strip().lower()
+    for canon, spec in PROVIDER_SPECS.items():
+        if n == canon or n in spec["aliases"]:
+            return canon
+    return n
+
+
+def get_provider_spec(name: str) -> dict[str, Any] | None:
+    """Get provider specification by canonical name or alias."""
+    canon = canonical_provider(name)
+    return PROVIDER_SPECS.get(canon)
+
+
+def get_provider_env_vars(provider_str: str, configured_var: str = "") -> list[str]:
+    """Return all environment variable names that can supply the API key for this provider."""
+    spec = get_provider_spec(provider_str)
+    vars_list: list[str] = []
+    if configured_var:
+        vars_list.append(configured_var)
+    if spec:
+        for v in [spec["api_key_env"]] + spec["fallback_api_key_envs"]:
+            if v and v not in vars_list:
+                vars_list.append(v)
+    if "PORTAL_LLM_API_KEY" not in vars_list:
+        vars_list.append("PORTAL_LLM_API_KEY")
+    return vars_list
+
+
+def resolve_api_key(cfg: Any) -> tuple[str, str]:
+    """Find the API key and the environment variable name it came from."""
+    llm = cfg.llm if hasattr(cfg, "llm") else cfg
+    spec = get_provider_spec(getattr(llm, "provider", ""))
+    candidate_vars: list[str] = []
+
+    # 1. Primary provider api_key_env
+    if spec and spec.get("api_key_env"):
+        candidate_vars.append(spec["api_key_env"])
+
+    # 2. Configured api_key_env on llm if explicitly specified and distinct
+    configured = getattr(llm, "api_key_env", "")
+    if configured and configured not in candidate_vars:
+        candidate_vars.append(configured)
+
+    # 3. Provider fallbacks (e.g. CLAUDE_API_KEY, ZHIPUAI_API_KEY, QWEN_API_KEY)
+    if spec:
+        for v in spec.get("fallback_api_key_envs", []):
+            if v and v not in candidate_vars:
+                candidate_vars.append(v)
+
+    # 4. Universal override
+    if "PORTAL_LLM_API_KEY" not in candidate_vars:
+        candidate_vars.append("PORTAL_LLM_API_KEY")
+
+    for var in candidate_vars:
+        val = os.environ.get(var, "").strip()
+        if val:
+            return val, var
+    return "", ""
+
+
+@dataclass
 class LlmConfig:
     provider: str = "mock"
     base_url: str = ""
@@ -81,6 +203,9 @@ class LlmConfig:
     specialist_max_tokens: int = 400
     orchestrator_max_tokens: int = 300
     panel_max_tokens: int = 220
+    supports_stream_usage: bool = True
+    token_param: str = "max_tokens"
+    send_temperature: bool = True
     live_typing_delay: float = 0.012
 
 
@@ -166,6 +291,9 @@ class PortalConfig:
     reference_pack: list[dict[str, str]]
     study_title: str
     db_path: Path
+    config_sha256: str = ""
+    entry_link_secret: str = ""
+    require_entry_sig: bool = False
 
     # ---- helpers --------------------------------------------------------
     def text(self, path: str, **fmt: Any) -> Any:
@@ -213,6 +341,19 @@ class PortalConfig:
         if exclude != self.orchestrator_name:
             lines.append(f"- {self.orchestrator_name} ({self.orchestrator['role_label']}): assigns work among the specialists; holds no client material.")
         return "\n".join(lines)
+
+    def set_provider(self, provider: str, base_url: str | None = None,
+                     model: str | None = None, api_key_env: str | None = None) -> None:
+        """Switch the active LLM provider and automatically apply canonical defaults."""
+        canon = canonical_provider(provider)
+        spec = get_provider_spec(canon)
+        cur = self.llm.__dict__.copy()
+        cur["provider"] = canon
+        if spec:
+            cur["base_url"] = base_url if base_url is not None else spec["base_url"]
+            cur["model"] = model if model is not None else spec["default_model"]
+            cur["api_key_env"] = api_key_env if api_key_env is not None else spec["api_key_env"]
+        self.llm = LlmConfig(**cur)
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +426,15 @@ def _build(cls, raw: dict | None):
 # Main loader
 # ---------------------------------------------------------------------------
 
+def compute_config_sha256(root: Path) -> str:
+    h = hashlib.sha256()
+    for p in sorted(root.rglob("*")):
+        if p.is_file() and p.suffix in (".yaml", ".yml", ".md"):
+            h.update(p.relative_to(root).as_posix().encode("utf-8"))
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
 def load_config(config_dir: str | Path | None = None) -> PortalConfig:
     if config_dir is None:
         root = Path(os.environ.get("PORTAL_CONFIG_DIR") or DEFAULT_CONFIG_DIR).resolve()
@@ -310,9 +460,46 @@ def load_config(config_dir: str | Path | None = None) -> PortalConfig:
     standalone = _env_bool("PORTAL_STANDALONE", bool(testing.get("standalone_mode", False)))
     scale = float(os.environ.get("PORTAL_TIMER_SCALE") or testing.get("timer_scale", 1.0))
 
-    llm = _build(LlmConfig, raw.get("llm"))
-    if os.environ.get("PORTAL_LLM_PROVIDER"):
-        llm = LlmConfig(**{**llm.__dict__, "provider": os.environ["PORTAL_LLM_PROVIDER"]})
+    llm_dict = dict(raw.get("llm") or {})
+    configured_provider = os.environ.get("PORTAL_LLM_PROVIDER") or llm_dict.get("provider", "mock")
+    canon_provider = canonical_provider(configured_provider)
+    spec = get_provider_spec(canon_provider)
+
+    default_base_url = spec["base_url"] if spec else ""
+    default_api_key_env = spec["api_key_env"] if spec else "OPENAI_API_KEY"
+    default_model = spec["default_model"] if spec else ""
+
+    raw_base_url = llm_dict.get("base_url", "")
+    if canon_provider not in ("mock", "openai") and (not raw_base_url or raw_base_url == "https://api.openai.com/v1"):
+        llm_dict["base_url"] = default_base_url
+    elif not raw_base_url:
+        llm_dict["base_url"] = default_base_url
+
+    base_url_override = (
+        os.environ.get("PORTAL_LLM_BASE_URL")
+        or (os.environ.get(f"{canon_provider.upper()}_BASE_URL") if canon_provider else None)
+    )
+    if base_url_override:
+        llm_dict["base_url"] = base_url_override
+
+    raw_model = llm_dict.get("model", "")
+    if canon_provider not in ("mock", "openai") and (not raw_model or raw_model in ("gpt-5.4-mini", "gpt-4o-mini-2024-07-18")):
+        llm_dict["model"] = default_model
+    elif not raw_model:
+        llm_dict["model"] = default_model
+    if os.environ.get("PORTAL_LLM_MODEL"):
+        llm_dict["model"] = os.environ["PORTAL_LLM_MODEL"]
+
+    raw_api_key_env = llm_dict.get("api_key_env", "")
+    if canon_provider not in ("mock", "openai") and (not raw_api_key_env or raw_api_key_env == "OPENAI_API_KEY"):
+        llm_dict["api_key_env"] = default_api_key_env
+    elif not raw_api_key_env:
+        llm_dict["api_key_env"] = default_api_key_env
+    if os.environ.get("PORTAL_LLM_API_KEY_ENV"):
+        llm_dict["api_key_env"] = os.environ["PORTAL_LLM_API_KEY_ENV"]
+
+    llm_dict["provider"] = canon_provider
+    llm = _build(LlmConfig, llm_dict)
 
     timers = _build(TimerConfig, raw.get("timers"))
     p = dict(raw.get("panel", {}))
@@ -342,12 +529,58 @@ def load_config(config_dir: str | Path | None = None) -> PortalConfig:
     clients = {cid: load_client(content_dir / cid, specialists) for cid in wanted}
 
     pages = raw["pages"]
+
+    config_sha = compute_config_sha256(root)
+    secret_key = os.environ.get("PORTAL_SECRET_KEY") or str(raw["server"].get("secret_key", ""))
+    admin_token = os.environ.get("PORTAL_ADMIN_TOKEN") or str(testing.get("admin_token", ""))
+    completion_code_secret = (
+        os.environ.get("PORTAL_COMPLETION_SECRET")
+        or os.environ.get("PORTAL_COMPLETION_CODE_SECRET")
+        or str(raw.get("qualtrics", {}).get("completion_code_secret", ""))
+    )
+    entry_link_secret = os.environ.get("PORTAL_ENTRY_SECRET") or secret_key
+    portal_env = os.environ.get("PORTAL_ENV", "").lower()
+    is_production = (portal_env in ("production", "prod")) or (not standalone)
+    require_entry_sig = _env_bool("PORTAL_REQUIRE_ENTRY_SIG", is_production)
+
+    host = os.environ.get("PORTAL_HOST") or str(raw["server"].get("host", "127.0.0.1"))
+    port = int(os.environ.get("PORTAL_PORT") or raw["server"].get("port", 8000))
+
+    known_defaults = {
+        "change-me-in-production",
+        "admin-test-token",
+        "change-me-too",
+        "replace-with-a-secure-random-secret",
+        "secure-token-for-exporting-data",
+    }
+    if is_production:
+        if secret_key in known_defaults or len(secret_key) < 24:
+            raise RuntimeError(
+                f"Insecure server.secret_key in production: must be >= 24 chars and not a default value. Set PORTAL_SECRET_KEY."
+            )
+        if admin_token in known_defaults or len(admin_token) < 24:
+            raise RuntimeError(
+                f"Insecure admin_token in production: must be >= 24 chars and not a default value. Set PORTAL_ADMIN_TOKEN."
+            )
+        if completion_code_secret in known_defaults or len(completion_code_secret) < 24:
+            raise RuntimeError(
+                f"Insecure qualtrics.completion_code_secret in production: must be >= 24 chars and not a default value. Set PORTAL_COMPLETION_SECRET."
+            )
+    else:
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            import logging
+            logging.getLogger("portal").warning(
+                "Standalone mode is running on non-loopback host '%s'. The test launcher is accessible to the network.", host
+            )
+
+    # propagate possibly overridden completion code secret
+    if "qualtrics" in raw and isinstance(raw["qualtrics"], dict):
+        raw["qualtrics"]["completion_code_secret"] = completion_code_secret
+
     return PortalConfig(
         root=root, raw=raw, config_version=str(raw["config_version"]), standalone=standalone,
         timer_scale=scale, allow_mobile=bool(testing.get("allow_mobile", False)),
-        admin_token=os.environ.get("PORTAL_ADMIN_TOKEN") or str(testing.get("admin_token", "")),
-        secret_key=os.environ.get("PORTAL_SECRET_KEY") or str(raw["server"]["secret_key"]),
-        host=str(raw["server"]["host"]), port=int(raw["server"]["port"]),
+        admin_token=admin_token, secret_key=secret_key, host=host, port=port,
         min_viewport_width=int(raw["server"].get("min_viewport_width", 900)),
         llm=llm, timers=timers, panel=panel, editor=editor, conditions=conditions,
         specialists=specialists, card_fields=card_fields, clients=clients,
@@ -358,6 +591,7 @@ def load_config(config_dir: str | Path | None = None) -> PortalConfig:
         qualtrics=raw["qualtrics"], orchestrator=raw["orchestrator"],
         reference_pack=raw["reference_pack"]["sections"], study_title=str(raw.get("study_title", "Interaction Portal")),
         db_path=Path(os.environ.get("PORTAL_DB_PATH") or (root.parent / "logs" / "portal.sqlite3")),
+        config_sha256=config_sha, entry_link_secret=entry_link_secret, require_entry_sig=require_entry_sig,
     )
 
 

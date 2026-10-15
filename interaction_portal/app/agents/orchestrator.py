@@ -11,10 +11,11 @@ orchestrator now has two jobs:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..config_loader import ClientConfig, PortalConfig
 from .base import LLMClient, LLMResult, call_with_retry, format_transcript
+from .panel_validator import proportional_trim, validate_panel, word_count
 from .schemas import Assignment, OrchestratorOutput, extract_json
 from .specialist import clean_reply
 
@@ -26,11 +27,9 @@ class PanelResult:
     sections_present: list[str]
     retried: bool = False
     truncated: bool = False
+    validation_errors: list[str] = field(default_factory=list)
+    panel_degraded: bool = False
     llm: LLMResult | None = None
-
-
-def word_count(text: str) -> int:
-    return len(text.split())
 
 
 def sections_in(text: str, labels: list[str]) -> list[str]:
@@ -90,7 +89,14 @@ class OrchestratorAgent:
         return out, res
 
     # ---- panel ----------------------------------------------------------
-    def generate_panel(self, level: str, transcript: list[dict], status: str, card_status: str) -> PanelResult:
+    def generate_panel(
+        self,
+        level: str,
+        transcript: list[dict],
+        status: str,
+        card_status: str,
+        unasked_specialists: list[str] | None = None,
+    ) -> PanelResult:
         p = self.cfg.panel
         lo, hi = p.word_budget
         labels = p.sections[level]
@@ -105,30 +111,90 @@ class OrchestratorAgent:
         meta = {"role": "panel", "level": level, "labels": labels, "client": self.client,
                 "transcript": transcript, "status": status, "card_status": card_status, "word_budget": (lo, hi)}
 
+        hidden_passages = {}
+        for pm in self.client.private.values():
+            hidden_passages.update(pm.hidden_passages)
+
         def run():
             return self.llm.complete("You write concise status panels.", prompt, temperature=self.cfg.llm.panel_temperature,
                                      max_tokens=self.cfg.llm.panel_max_tokens, json_mode=False, meta=meta)
 
         res = call_with_retry(self.llm, self.name, run, self.cfg.llm.retries, on_error=self.on_error)
         text = res.text.strip()
-        retried = truncated = False
-        if not lo <= word_count(text) <= hi:
+        retried = truncated = panel_degraded = False
+
+        errs = validate_panel(
+            text, level, labels, (lo, hi),
+            hidden_passages=hidden_passages,
+            name_unasked=p.name_unasked,
+            unasked_specialists=unasked_specialists,
+        )
+
+        retries_done = 0
+        while errs and retries_done < 2:
+            retried = True
+            retries_done += 1
+            retry_prompt = (
+                prompt
+                + f"\n\nCRITICAL CORRECTION REQUIRED: The previous draft had validation errors:\n"
+                + "\n".join(f"- {e}" for e in errs)
+                + f"\nPlease rewrite strictly following all instructions and keeping within {lo}-{hi} words."
+            )
+            try:
+                res = call_with_retry(
+                    self.llm, self.name,
+                    lambda: self.llm.complete("You write concise status panels.", retry_prompt,
+                                              temperature=self.cfg.llm.panel_temperature,
+                                              max_tokens=self.cfg.llm.panel_max_tokens, json_mode=False, meta=meta),
+                    0, on_error=self.on_error
+                )
+                text = res.text.strip()
+                errs = validate_panel(
+                    text, level, labels, (lo, hi),
+                    hidden_passages=hidden_passages,
+                    name_unasked=p.name_unasked,
+                    unasked_specialists=unasked_specialists,
+                )
+            except Exception:
+                break
+
+        if errs and word_count(text) > hi:
             retried = True
             cprompt = self.cfg.prompts["panel_compress"].format(
                 word_min=lo, word_max=hi, word_target=p.word_target, labels=", ".join(labels), text=text)
             cmeta = {**meta, "role": "compress", "text": text}
-
-            def run2():
-                return self.llm.complete("You edit text to a strict word range.", cprompt, temperature=0.0,
-                                         max_tokens=self.cfg.llm.panel_max_tokens, json_mode=False, meta=cmeta)
             try:
-                res2 = call_with_retry(self.llm, self.name, run2, 0, on_error=self.on_error)
-                text = res2.text.strip()
-            except Exception:  # noqa: BLE001 - keep the first text and fall through to the hard trim
+                res2 = call_with_retry(self.llm, self.name,
+                                      lambda: self.llm.complete("You edit text to a strict word range.", cprompt,
+                                                               temperature=0.0, max_tokens=self.cfg.llm.panel_max_tokens,
+                                                               json_mode=False, meta=cmeta),
+                                      0, on_error=self.on_error)
+                candidate = res2.text.strip()
+                c_errs = validate_panel(
+                    candidate, level, labels, (lo, hi),
+                    hidden_passages=hidden_passages,
+                    name_unasked=p.name_unasked,
+                    unasked_specialists=unasked_specialists,
+                )
+                if len(c_errs) <= len(errs):
+                    text = candidate
+                    errs = c_errs
+            except Exception:
                 pass
-        if word_count(text) > hi:       # last-resort guard: the participant never sees an over-budget panel
-            text = " ".join(text.split()[:hi]).rstrip(",;:") 
-            if not text.endswith((".", "!", "?")):
-                text += "."
+
+        if errs or word_count(text) > hi:
+            text = proportional_trim(text, labels, hi)
             truncated = True
-        return PanelResult(text, word_count(text), sections_in(text, labels), retried, truncated, res)
+            panel_degraded = True
+            errs = validate_panel(
+                text, level, labels, (lo, hi),
+                hidden_passages=hidden_passages,
+                name_unasked=p.name_unasked,
+                unasked_specialists=unasked_specialists,
+            )
+
+        return PanelResult(
+            text=text, word_count=word_count(text), sections_present=sections_in(text, labels),
+            retried=retried, truncated=truncated, validation_errors=errs,
+            panel_degraded=panel_degraded, llm=res
+        )
