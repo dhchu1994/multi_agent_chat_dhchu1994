@@ -24,6 +24,7 @@
     this.texts = opts.texts || {};
     this.timers = {};
     this.pending = {};      // field -> last text typed locally and not yet confirmed
+    this.pasteCounts = {};  // field -> pasted chars since last save
     this.refs = {};         // field -> {textarea, suggBox}
     this.build();
     this.update(this.view);
@@ -89,7 +90,7 @@
         return;
       }
       if (pastedData) {
-        this.pasteCount = (this.pasteCount || 0) + pastedData.length;
+        this.pasteCounts[f.id] = (this.pasteCounts[f.id] || 0) + pastedData.length;
         if (window.Portal && window.Portal.event) {
           Portal.event("card_paste", { chars: pastedData.length, field: f.id });
         }
@@ -116,8 +117,8 @@
     const text = this.pending[fieldId];
     if (text === undefined) return;
     delete this.pending[fieldId];
-    const pasteChars = this.pasteCount || 0;
-    this.pasteCount = 0;
+    const pasteChars = (this.pasteCounts && this.pasteCounts[fieldId]) || 0;
+    if (this.pasteCounts) this.pasteCounts[fieldId] = 0;
     this.inflight = (this.inflight || 0) + 1;
     const r = await this.call({ action: "type", field: fieldId, text: text, paste_chars: pasteChars, pasted: pasteChars > 0 });
     this.inflight--;

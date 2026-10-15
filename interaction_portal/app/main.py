@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -168,6 +169,15 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
             return error_page(request, cfg.text("errors.bad_condition"))
         if MOBILE_RE.search(ua) and not cfg.allow_mobile:
             return error_page(request, cfg.text("errors.mobile"), 403)
+        max_p = getattr(cfg, "max_concurrent_participants", 0) or 0
+        if max_p > 0:
+            active_now = store.count_active_sessions(cfg.scaled(cfg.timers.resume_gap_seconds))
+            if active_now >= max_p:
+                return error_page(
+                    request,
+                    f"The study portal is currently at full capacity ({max_p} active participants). Please wait a moment and refresh this page to begin.",
+                    503,
+                )
         state = mgr.start_session(pid, condition, user_agent=ua)
         if state is None:       # lost a race: somebody else created it first
             return error_page(request, cfg.text("errors.already_used"), 403)
@@ -404,9 +414,10 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
         if pii_entities:
             try:
                 state = mgr.get(pid)
+                entity_names = [e if isinstance(e, str) else getattr(e, "entity_type", str(e)) for e in pii_entities]
                 mgr.logger(state).log("pii_flag", "task", mgr.sm.client_id(state),
-                                     entities=[e.entity_type for e in pii_entities],
-                                     count=len(pii_entities))
+                                     entities=entity_names,
+                                     count=len(entity_names))
             except Exception:
                 pass
         return ndjson(mgr.chat_send(pid, text))
@@ -423,10 +434,15 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
     @app.post("/api/card/action")
     async def card_action(request: Request):
         d = await body(request)
+        pid = need_pid(request)
         pasted = bool(d.get("pasted") or (isinstance(d.get("paste_chars"), (int, float)) and d.get("paste_chars") > 0))
-        view = mgr.card_action(need_pid(request), str(d.get("action", "")), str(d.get("span_id", "")),
-                               str(d.get("reason", "")), str(d.get("field", "")), str(d.get("text", "")),
-                               pasted=pasted)
+        view = await anyio.to_thread.run_sync(
+            lambda: mgr.card_action(
+                pid, str(d.get("action", "")), str(d.get("span_id", "")),
+                str(d.get("reason", "")), str(d.get("field", "")), str(d.get("text", "")),
+                pasted=pasted,
+            )
+        )
         return {"ok": True, "card": view}
 
     @app.get("/api/card")
@@ -502,26 +518,35 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
         }
 
     # ------------------------------------------------------------------ admin (token protected)
-    _admin_failed_attempts: list[float] = []
+    _admin_failed_attempts: dict[str, list[float]] = {}
     _admin_lock = threading.Lock()
+    admin_signer = URLSafeSerializer(cfg.secret_key, salt="portal-admin")
 
     def admin_ok(request: Request) -> bool:
         now = time.time()
+        client_ip = (request.client.host if request.client else "local") or "local"
         with _admin_lock:
-            nonlocal _admin_failed_attempts
-            _admin_failed_attempts = [t for t in _admin_failed_attempts if now - t < 60]
-            if len(_admin_failed_attempts) >= 10:
+            attempts = [t for t in _admin_failed_attempts.get(client_ip, []) if now - t < 60]
+            _admin_failed_attempts[client_ip] = attempts
+            if len(attempts) >= 10:
                 return False
 
-        supplied = request.headers.get("x-admin-token", "")
+        supplied = request.headers.get("x-admin-token", "") or request.query_params.get("token", "").strip()
         auth = request.headers.get("authorization", "")
         if not supplied and auth.lower().startswith("bearer "):
             supplied = auth[7:].strip()
+        if not supplied:
+            cookie_tok = request.cookies.get("portal_admin", "")
+            if cookie_tok:
+                try:
+                    supplied = admin_signer.loads(cookie_tok)
+                except BadSignature:
+                    supplied = ""
 
         ok = bool(cfg.admin_token) and bool(supplied) and hmac.compare_digest(supplied.encode(), cfg.admin_token.encode())
         if not ok:
             with _admin_lock:
-                _admin_failed_attempts.append(now)
+                _admin_failed_attempts.setdefault(client_ip, []).append(now)
         return ok
 
     @app.get("/admin/health")
@@ -545,13 +570,45 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
     @app.get("/admin", response_class=HTMLResponse)
     def admin_dashboard(request: Request):
         if not admin_ok(request):
-            return HTMLResponse("<h1>403 Forbidden</h1><p>Provide valid x-admin-token or Authorization: Bearer token.</p>", status_code=403)
+            return HTMLResponse("<!DOCTYPE html><html><head><title>Admin Login</title><style>body{font-family:sans-serif;margin:4rem auto;max-width:420px;background:#f8fafc;color:#1e293b}.box{background:#fff;padding:2rem;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}input{width:100%;padding:.6rem;margin:.5rem 0 1rem;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box}button{background:#0284c7;color:#fff;border:0;padding:.6rem 1.2rem;border-radius:4px;cursor:pointer;font-weight:600}</style></head><body><div class=box><h2>Portal Admin Login</h2><p>Enter your <code>admin_token</code> from <code>config/config.yaml</code> (default: <code>admin-test-token</code>):</p><form method=get action=/admin><input type=password name=token placeholder=admin-test-token required autofocus><button type=submit>Sign In</button></form></div></body></html>", status_code=403)
         sessions = store.sessions()
         total = len(sessions)
         completed = sum(1 for s in sessions if s.get("end_state") == "completed")
         active = sum(1 for s in sessions if not s.get("end_state"))
         dropped = total - completed - active
-        return HTMLResponse(f"""<!DOCTYPE html>
+        cond_counts: dict[str, dict[str, int]] = {
+            c: {"total": 0, "completed": 0, "active": 0} for c in cfg.conditions
+        }
+        for s in sessions:
+            cc = s.get("condition_code", "")
+            row_c = cond_counts.setdefault(cc, {"total": 0, "completed": 0, "active": 0})
+            row_c["total"] += 1
+            if s.get("end_state") == "completed":
+                row_c["completed"] += 1
+            elif not s.get("end_state"):
+                row_c["active"] += 1
+        cond_rows_html = "".join(
+            f"<tr><td><b>{html.escape(k)}</b></td><td>{v['total']}</td><td>{v['completed']}</td><td>{v['active']}</td></tr>"
+            for k, v in cond_counts.items()
+        )
+        recent_rows_html = ""
+        for s in sessions[-25:]:
+            try:
+                st_obj = json.loads(s.get("state") or "{}")
+            except Exception:
+                st_obj = {}
+            res_tok = s.get("resume_token") or ""
+            res_link = f"/?resume={html.escape(res_tok)}" if res_tok else ""
+            recent_rows_html += (
+                f"<tr><td>{html.escape(str(s.get('pid', '')))}</td>"
+                f"<td>{html.escape(str(s.get('condition_code', '')))}</td>"
+                f"<td>{html.escape(str(st_obj.get('page', '')))}</td>"
+                f"<td>{int(st_obj.get('client_index', 0)) + 1}</td>"
+                f"<td>{html.escape(str(s.get('end_state') or 'active'))}</td>"
+                f"<td>{int(s.get('resume_count') or 0)}</td>"
+                f"<td>{f'<a href="{res_link}">Resume URL</a>' if res_link else '-'}</td></tr>"
+            )
+        resp = HTMLResponse(f"""<!DOCTYPE html>
 <html>
 <head><title>Portal Admin Dashboard</title><style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 2rem; background: #f8fafc; color: #1e293b; }}
@@ -561,11 +618,14 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 .stat-box h3 {{ margin: 0; font-size: 2rem; color: #0284c7; }}
 .btn {{ display: inline-block; padding: 0.5rem 1rem; background: #0284c7; color: white; text-decoration: none; border-radius: 4px; margin-right: 0.5rem; margin-bottom: 0.5rem; }}
 .btn:hover {{ background: #0369a1; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.9rem; }}
+th, td {{ text-align: left; padding: 0.5rem; border-bottom: 1px solid #e2e8f0; }}
+th {{ color: #475569; font-weight: 600; }}
 </style></head>
 <body>
 <h1>Interaction Portal Admin</h1>
 <div class="card">
-  <h2>Study Overview</h2>
+  <h2>Study Overview (Max Concurrent Capacity: {cfg.max_concurrent_participants})</h2>
   <div class="stats">
     <div class="stat-box"><h3>{total}</h3><p>Total Sessions</p></div>
     <div class="stat-box"><h3>{completed}</h3><p>Completed</p></div>
@@ -576,6 +636,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 <div class="card">
   <h2>Flat Data Exports</h2>
   <p>Download clean researcher-facing datasets:</p>
+  <a class="btn" href="/admin/export/task_summary.csv">Task Summary (Wide CSV)</a>
   <a class="btn" href="/admin/export/events.csv">Events CSV</a>
   <a class="btn" href="/admin/export/panels.csv">Panels CSV</a>
   <a class="btn" href="/admin/export/transcripts.csv">Transcripts CSV</a>
@@ -584,7 +645,26 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
   <a class="btn" href="/admin/export/sessions.csv">Sessions CSV</a>
   <a class="btn" href="/admin/export/all.json">Full Dump (JSON)</a>
 </div>
+<div class="card">
+  <h2>Condition Balance</h2>
+  <table><thead><tr><th>Condition</th><th>Total</th><th>Completed</th><th>Active</th></tr></thead>
+  <tbody>{cond_rows_html}</tbody></table>
+</div>
+<div class="card">
+  <h2>Recent Sessions</h2>
+  <table><thead><tr><th>PID</th><th>Condition</th><th>Page</th><th>Client #</th><th>Status</th><th>Resumes</th><th>Recovery</th></tr></thead>
+  <tbody>{recent_rows_html}</tbody></table>
+</div>
 </body></html>""")
+        resp.set_cookie("portal_admin", admin_signer.dumps(cfg.admin_token), httponly=True, samesite="lax", max_age=3600)
+        return resp
+
+    @app.get("/admin/export/task_summary.csv")
+    def export_task_summary(request: Request):
+        if not admin_ok(request):
+            return PlainTextResponse("forbidden", status_code=403)
+        return PlainTextResponse(store.task_summary_csv(), media_type="text/csv",
+                                 headers={"Content-Disposition": "attachment; filename=task_summary.csv"})
 
     @app.get("/admin/export/events.csv")
     def export_events(request: Request):
@@ -679,10 +759,112 @@ def fmt_time(seconds: float | int) -> str:
     return f"{s // 60}:{s % 60:02d}"
 
 
+_FIX_HINTS: dict[str, str] = {
+    "test_config_loader": "Check config/config.yaml and config/conditions.yaml for missing or misspelled settings.",
+    "test_event_store": "Check that the logs/ folder has write permissions and is not locked by another program.",
+    "test_agents_and_mock": "Check that all prompt files in config/prompts/ and client files in config/content/clients/ are intact.",
+    "test_api_endpoints": "Check that server.secret_key and testing.admin_token in config/config.yaml are set properly.",
+    "test_card_provenance": "Check card field definitions and editor settings in config/config.yaml.",
+    "test_chat_router": "Check specialist names and orchestrator settings in config/config.yaml.",
+    "test_harnesses": "Run 'python -m app.tools.preflight' to see which client brief or specialist file has an issue.",
+    "test_multi_providers": "Check the llm section in config/config.yaml or set llm.provider to 'mock' for offline testing.",
+    "test_practice": "Check the practice section in config/config.yaml to ensure all practice steps are present.",
+    "test_session_manager": "Check timer settings and client lists in config/config.yaml.",
+    "test_state_machine": "Check randomised and fixed_last client IDs in config/config.yaml.",
+    "test_terminal": "Check terminal output settings or set NO_COLOR=1 if your console has display issues.",
+    "test_theme": "Check that app/static/css/portal.css and app/static/js/portal.js have not been moved or deleted.",
+    "test_bugs_and_improvements": "Run 'pytest -v' in a terminal to inspect the specific check that changed.",
+}
+
+
+def run_startup_tests() -> None:
+    """Run the test suite concisely on startup. Never blocks the portal from starting if a test fails."""
+    import subprocess
+    import sys
+    from .terminal import bold, green, orange
+
+    if os.environ.get("PORTAL_SKIP_STARTUP_TESTS", "").strip().lower() in ("1", "true", "yes"):
+        return
+
+    portal_root = HERE.parent
+    tests_dir = portal_root / "tests"
+    if not tests_dir.is_dir():
+        return
+
+    test_files = sorted(f for f in tests_dir.glob("test_*.py") if f.is_file())
+    n_suites = len(test_files)
+    if n_suites == 0:
+        return
+
+    env = os.environ.copy()
+    env["PORTAL_LLM_PROVIDER"] = "mock"
+    env["PORTAL_STANDALONE"] = "1"
+    env["PORTAL_REQUIRE_ENTRY_SIG"] = "0"
+
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", str(tests_dir), "-q", "--tb=line", "--disable-warnings"],
+            cwd=str(portal_root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=25,
+        )
+    except Exception as exc:
+        print(orange(f"⚠ Startup self-check skipped ({type(exc).__name__}). Starting portal normally..."))
+        return
+
+    elapsed = time.monotonic() - t0
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    m_pass = re.search(r"(\d+)\s+passed", out)
+    m_fail = re.search(r"(\d+)\s+(?:failed|error)", out)
+    passed_cnt = int(m_pass.group(1)) if m_pass else 0
+    failed_cnt = int(m_fail.group(1)) if m_fail else 0
+    total_cnt = passed_cnt + failed_cnt
+
+    if proc.returncode == 0:
+        count_label = f"{n_suites}/{n_suites} test suites ({passed_cnt}/{passed_cnt} checks)" if passed_cnt else f"{n_suites}/{n_suites} test suites"
+        print(green(f"✓ Startup self-check: {count_label} passed in {elapsed:.1f}s."))
+        return
+
+    # One or more tests failed: print a calm orange warning with 1-sentence reason and fix hint
+    ratio = f"{passed_cnt}/{total_cnt}" if total_cnt else f"0/{n_suites}"
+    print(orange(bold(f"⚠ Startup warning: {ratio} checks passed ({failed_cnt} had an issue). The portal will still start.")))
+
+    failure_lines: list[tuple[str, str, str]] = []
+    for raw_line in out.splitlines():
+        line = raw_line.strip()
+        if ".py:" in line and ("Error:" in line or "assert " in line or "FAILED" in line):
+            parts = line.split(":", 2)
+            file_part = Path(parts[0]).stem if parts else "unknown_test"
+            reason = parts[2].strip() if len(parts) >= 3 else line
+            reason_one_sentence = reason.split(". ")[0].rstrip(".") + "."
+            if len(reason_one_sentence) > 140:
+                reason_one_sentence = reason_one_sentence[:137] + "..."
+            hint = _FIX_HINTS.get(file_part, "Run 'python -m app.tools.preflight' to check your configuration files.")
+            failure_lines.append((file_part, reason_one_sentence, hint))
+
+    seen_files: set[str] = set()
+    for file_part, reason_one_sentence, hint in failure_lines:
+        if file_part in seen_files:
+            continue
+        seen_files.add(file_part)
+        print(orange(f"  • Failed check: {file_part}"))
+        print(orange(f"    Why it failed: {reason_one_sentence}"))
+        print(orange(f"    How to fix:    {hint}"))
+
+    if not seen_files:
+        print(orange("  • Why it failed: One or more startup checks returned a non-zero status."))
+        print(orange("  • How to fix:    Run 'python -m app.tools.preflight' to verify your configuration."))
+    print(orange("  Continuing to launch the Interaction Portal..."))
+
+
 def main() -> None:
     import uvicorn
     from .terminal import init_terminal, supports_color
     can_color = init_terminal()
+    run_startup_tests()
     cfg = load_config()
     uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, use_colors=can_color)
 

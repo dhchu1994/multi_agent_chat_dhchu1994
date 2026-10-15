@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -110,7 +111,7 @@ def verify_database(db_path: Path) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify SQLite portal database integrity.")
-    parser.add_argument("--db", type=str, default="data/portal.db", help="Path to database file")
+    parser.add_argument("--db", type=str, default=os.environ.get("PORTAL_DB_PATH") or ("data/portal.db" if Path("data/portal.db").exists() else str(Path(__file__).resolve().parents[2] / "logs" / "portal.sqlite3")), help="Path to database file")
     args = parser.parse_args()
 
     ok = verify_database(Path(args.db))

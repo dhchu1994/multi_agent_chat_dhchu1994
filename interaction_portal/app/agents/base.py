@@ -67,8 +67,17 @@ class OpenAICompatClient(LLMClient):
                 f"Set one (e.g. {expected[0]}=your-key), or use llm.provider: mock "
                 "(PORTAL_LLM_PROVIDER=mock) for offline testing."
             )
+        import httpx
         base_url = cfg.llm.base_url or None
-        self._client = OpenAI(base_url=base_url, api_key=key, timeout=cfg.llm.timeout_seconds)
+        max_p = getattr(cfg, "max_concurrent_participants", 100) or 100
+        http_client = httpx.Client(
+            timeout=cfg.llm.timeout_seconds,
+            limits=httpx.Limits(
+                max_connections=max(100, max_p * 3),
+                max_keepalive_connections=max(50, max_p),
+            ),
+        )
+        self._client = OpenAI(base_url=base_url, api_key=key, timeout=cfg.llm.timeout_seconds, http_client=http_client)
         self.model_version = cfg.llm.model
 
     def complete(self, system: str, user: str, *, temperature: float, max_tokens: int,
@@ -155,6 +164,15 @@ class ClaudeClient(LLMClient):
         self.base_url = (cfg.llm.base_url or "https://api.anthropic.com").rstrip("/")
         self.timeout = cfg.llm.timeout_seconds
 
+        import httpx
+        max_p = getattr(cfg, "max_concurrent_participants", 100) or 100
+        self._http_client = httpx.Client(
+            timeout=self.timeout,
+            limits=httpx.Limits(
+                max_connections=max(100, max_p * 3),
+                max_keepalive_connections=max(50, max_p),
+            ),
+        )
         self._anthropic_client = None
         try:
             import anthropic
@@ -175,8 +193,9 @@ class ClaudeClient(LLMClient):
             try:
                 return self._complete_sdk(system, user, temperature=temperature, max_tokens=max_tokens,
                                           json_mode=json_mode, meta=meta)
-            except Exception:
-                # If SDK fails due to version or client incompatibility, fallback to direct HTTP
+            except (ImportError, AttributeError, TypeError):
+                # Fallback to direct HTTP only on SDK compatibility errors, not transient API/network errors
+                self._anthropic_client = None
                 return self._complete_http(system, user, temperature=temperature, max_tokens=max_tokens,
                                            json_mode=json_mode, meta=meta)
         return self._complete_http(system, user, temperature=temperature, max_tokens=max_tokens,
@@ -251,8 +270,8 @@ class ClaudeClient(LLMClient):
             "stream": True,
         }
 
-        with httpx.Client(timeout=self.timeout) as client:
-            with client.stream("POST", url, headers=headers, json=payload) as response:
+        if True:
+            with self._http_client.stream("POST", url, headers=headers, json=payload) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
                     if not line:

@@ -234,6 +234,10 @@ def yellow(text: str) -> str:
     return colorize(text, "33")
 
 
+def orange(text: str) -> str:
+    return colorize(text, "38;5;208")
+
+
 def blue(text: str) -> str:
     return colorize(text, "34")
 

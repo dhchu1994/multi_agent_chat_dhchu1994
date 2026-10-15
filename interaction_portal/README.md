@@ -1,950 +1,680 @@
-# Interaction Portal (v2)
+# Multi-Agent Chat Simulation (beta v1)
 
-## What is the Interaction Portal? (Overview for Human Users)
+A browser-based chat application where you have a conversation with several AI-driven characters at the same time. The characters each have a distinct personality and role in a shared scenario, and a behind-the-scenes "orchestrator" decides, after each message you send, which characters should reply and in what order.
 
-The **Interaction Portal** is an interactive, browser-based collaborative workspace where human participants work together with a team of artificial intelligence (AI) agents to solve realistic business and marketing strategy challenges. In this study, you step into the role of a team lead or strategic decision-maker addressing client briefs—such as launching an educational campaign, redesigning a brand, or planning an event.
-
-**How Users Use It:**
-- **Meet the AI Team:** You collaborate with four specialized AI domain experts—**Nia** (Creative Concept & Copywriting), **Theo** (Audience & Market Research), **Rhys** (Channels & Content Distribution), and **Mira** (Budget, Feasibility & Metrics)—coordinated by an **AI Orchestrator** that synthesizes team progress.
-- **Interactive Live Chat:** You communicate with the team via a familiar group chat interface, directing questions to specific specialists using `@Nia`, `@Theo`, `@Rhys`, `@Mira`, or broadcasting questions to `@team`.
-- **Real-Time Guidance & Feedback Panel:** As you and the agents brainstorm, an intelligent side panel continuously summarizes team progress, diagnoses what requirements might be missing or unverified, and provides strategic coaching.
-- **Creating the Deliverable:** Depending on your experimental condition, you either observe the AI drafting the recommendation card (Passive), review and approve/reject/modify proposed card points using Keep, Cut, and Send-back controls (Evaluative), or write the strategic card yourself with AI-suggested inspirations (Generative). In the baseline condition (No-AI), you solve the challenges independently using a structured digital Reference Pack containing all source materials.
-- **Reflections & Breaks:** Seven clients are presented in total: six collaborative tasks with the team, and the final client alone. After submitting your strategic recommendation for each client, you complete short reflection check-ins. A structured break occurs after the third client to ensure you stay refreshed.
-
-**Why This Study Matters (The Research Objective):**
-As generative AI transforms modern workplaces, teams increasingly involve humans working alongside multiple autonomous AI agents. This research portal investigates **how different levels of human control (agency)** and **different styles of AI management feedback** impact problem-solving quality, critical thinking, creative output, and human satisfaction. By tracking card edits (debounced diffs after 700 ms), messages, review decisions, attention telemetry (window blur/focus, scroll samples, accordion fold interactions), and time spent on reference materials in a secure, privacy-preserving event log, this platform provides scientific insights into how future AI systems can be designed to empower human workers rather than overwhelm or replace them.
+**`config.yaml` is the main file for changing the application.** All wording of the study screens (including questions, answers and button captions), all agent descriptions and prompts, and all settings are defined there. `main.py` only contains the mechanics (what happens when a button is clicked).
 
 ---
 
-## Quick Start: How to Run the Application (Step-by-Step Guide)
+## What Does It Do?
 
-This guide walks you step-by-step through setting up and running the Interaction Portal on your local machine. It is written especially for users and researchers who may have little or no programming experience.
+When you open the app in your browser you see a login screen. After entering your name (and optionally a password), you are guided through the study screens (see [Study Flow](#study-flow)) and finally enter the live group chat. You type messages just like in any chat app. The AI agents read what you wrote, consider the ongoing conversation, and respond — often multiple agents in a row, sometimes just one, sometimes none (if the conversation naturally calls for silence).
 
-### System Requirements & Prerequisites
-
-Before you begin, ensure you have the following installed on your computer:
-
-1. **Git** (Code Download & Version Control):
-   - Used to download the code repository to your computer.
-   - If you do not have Git, download and install it for free from [git-scm.com](https://git-scm.com/) (using the default installer options).
-2. **Anaconda or Miniconda** (Recommended Python Environment Manager):
-   - Manages Python and project dependencies cleanly in an isolated sandbox, avoiding any conflicts with existing software.
-   - If you do not have it installed, download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) (lightweight, recommended) or [Anaconda](https://www.anaconda.com/download).
-   - *(Alternative)*: If you already have standard Python (version 3.10, 3.11, or 3.12) installed from [python.org](https://www.python.org/), that also works with standard `venv`.
-3. **A Modern Desktop Web Browser**:
-   - Google Chrome, Microsoft Edge, Mozilla Firefox, or Apple Safari.
-   - *Note:* The experiment requires a standard desktop or laptop screen (minimum viewport width 900px). Mobile devices and tablets are blocked by default to preserve experimental control.
-4. **(Optional) AI Provider API Key (Claude, ChatGPT / OpenAI, DeepSeek, GLM, or Qwen)**:
-   - **Only required for Real AI Mode**. The portal supports API keys from **Claude** (Anthropic), **ChatGPT** (OpenAI), **DeepSeek**, **GLM** (Zhipu AI), and **Qwen** (Alibaba Cloud DashScope). If you want to explore the application, test conditions, or conduct local demonstrations, **no API key is needed**—the portal includes a free, fully deterministic offline mock AI out of the box!
+The experience is designed to feel like a real team meeting or group discussion, not a one-on-one chatbot.
 
 ---
 
-### Step 1: Clone or Download the Repository
+## Study Flow
 
-Open your terminal or command prompt and clone the repository:
+After the login screen, the participant moves through 10 screens. A progress bar at the top lets the participant jump back to any screen that was already completed.
 
-```bash
-git clone https://github.com/your-username/multi_agent_chat.git
-```
+| # | Screen | What happens |
+|---|---|---|
+| 1 | Consent | The participant reads the information and ticks the consent box before continuing. |
+| 2 | Briefing | Shows the task (`ui.task_description`) and the participant's role as team leader. |
+| 3 | Check 1 | Comprehension questions about the task. All must be correct; otherwise the participant is sent back to the briefing. |
+| 4 | Meet team | Cards for the Coordinator and the other agents (names, titles and descriptions from the `agents` section). The order of the specialist cards is randomised (counterbalanced). |
+| 5 | Check 2 | Comprehension questions about the team. All must be correct; otherwise the participant is sent back to the team page. |
+| 6 | Tutorial | Four practice steps: message the whole team, `@mention` one agent, ask the image agent for an image, and pause/resume. |
+| 7 | Role | One of the leadership-role conditions is assigned at random; some conditions require a written reflection. |
+| 8 | Check 3 | A 7-point Likert reflection scale; every item must be answered. |
+| 9 | Live task | The multi-agent chat with a Task/Agents/Tips side panel, elapsed timer, `@mention` buttons, Pause/Resume and poster saving. |
+| 10 | Debrief | Thank-you message and a link to the exit survey that includes the session ID. |
 
-> [!NOTE]
-> **Downloaded as a ZIP file?**
-> If you downloaded a `.zip` file instead of using Git, extract the archive into a folder on your computer (for example, `D:\Desktop\Git\multi_agent_chat` or `C:\Users\YourName\multi_agent_chat`).
-
----
-
-### Step 2: Open Anaconda Prompt (or Terminal)
-
-- **On Windows (using Anaconda / Miniconda - Recommended):**
-  1. Click the Windows Start menu or press the Windows key.
-  2. Type **"Anaconda Prompt"** (or **"Miniconda Prompt"**).
-  3. Click to launch the prompt window.
-- **On Windows (using PowerShell or Command Prompt):**
-  - Press the Windows key, search for **"PowerShell"** or **"cmd"**, and press Enter.
-- **On macOS / Linux:**
-  - Open the **Terminal** application from Applications or Spotlight.
+Every step is written to an event log (shown at the bottom of the page and saved with the conversation transcript).
 
 ---
 
-### Step 3: Navigate to the `interaction_portal` Folder
+## How It Works
 
-Use the `cd` (change directory) command to navigate into the `interaction_portal` subfolder where the project files reside.
-
-**On Windows:**
-```cmd
-# If your folder is on a different drive (e.g., D:), switch drives first:
-d:
-
-# Then change directory to the interaction_portal folder:
-cd D:\Desktop\Git\multi_agent_chat\interaction_portal
+```
+You type a message
+        │
+        ▼
+┌─────────────────┐   "Who should reply?"   ┌──────────────────────┐
+│   Simulation    │ ──────────────────────► │     Orchestrator      │
+│   (main loop)   │ ◄────────────────────── │  (AI decision-maker)  │
+│                 │   List of agents + why  │                       │
+└────────┬────────┘                         └──────────────────────┘
+         │
+         │  For each selected agent:
+         ▼
+┌─────────────────┐   streamed reply    ┌──────────────────────┐
+│      Agent      │ ──────────────────► │   Chat window (UI)   │
+│   (AI model)    │                     │   (live typing)       │
+└─────────────────┘                     └──────────────────────┘
+         │
+         ▼
+┌──────────────────────┐
+│  Conversation Logger │  ← saves every message to disk automatically
+└──────────────────────┘
 ```
 
-**On macOS / Linux:**
-```bash
-cd ~/path/to/multi_agent_chat/interaction_portal
-```
-
-> [!TIP]
-> **Verify your directory:**
-> Type `dir` (on Windows) or `ls` (on macOS/Linux) and press Enter. You should see folders such as `app`, `config`, `logs`, and files such as `requirements.txt`. If you see them, you are in the correct directory.
+1. **You** type a message and press Send (or Enter).
+2. The **Simulation** passes the full conversation history to the **Orchestrator**.
+3. The **Orchestrator** is itself an AI model. It reads the conversation and gives each agent a "response probability" based on the agent's role, how often they have spoken, and how relevant they are to what you just said. It then picks which agents should reply.
+4. Each selected **Agent** generates a reply, which appears word-by-word in the chat window (live-typing effect).
+5. Everything is automatically saved to the `conversations/` folder on disk.
 
 ---
 
-### Step 4: Create and Activate a Dedicated Virtual Environment
+## Special Features
 
-A virtual environment keeps the project's dependencies completely isolated from the rest of your system.
-
-#### Option A: Using Conda (Recommended if you installed Anaconda / Miniconda)
-
-```bash
-# 1. Create a fresh environment named "portal" with Python 3.11:
-conda create -n portal python=3.11 -y
-
-# 2. Activate the environment:
-conda activate portal
-```
-*Your prompt line will now show `(portal)` at the beginning, confirming that the environment is active.*
-
-#### Option B: Using Standard Python `venv` (If not using Conda)
-
-**On Windows (Command Prompt / Anaconda Prompt):**
-```cmd
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-**On Windows (PowerShell):**
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-*(If PowerShell displays an `ExecutionPolicy` error, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` and then run the activate command again).*
-
-**On macOS / Linux:**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+- **@-Mentions**: You can explicitly choose which agents should reply by tagging them with the `@` symbol (e.g., `@Alice what do you think?`). The system bypasses normal probability rules and guarantees only the tagged agents respond.
+- **Image Generation**: The simulation includes a dedicated image-generation agent named "Picasso" (role `image_generator`). The orchestrator never selects it by itself, so you can only generate images by mentioning it, e.g. `"@Picasso generate an image of..."`. The image is rendered directly in the chat window via the configured image generation API (`image_api`); click a generated image to save it as your final poster.
 
 ---
 
-### Step 5: Install Project Dependencies
+## Project Structure
 
-Make sure your environment is activated (you should see `(portal)` or `(.venv)` in your terminal), then install the required Python libraries:
+| File | Description |
+|---|---|
+| `main.py` | Launches the Gradio web interface and contains only the mechanics: login, screen navigation, answer checking, tutorial logic, condition assignment, live streaming, pause/resume, poster saving and event logging. It contains no wording; every text comes from `config.yaml` |
+| `config.yaml` | **The main file for editing the app** — all screen text (`screens`), UI settings (`ui`), agents and their prompts (`agents`), orchestrator settings and prompt (`orchestrator`), shared agent prompt (`scenario`), API, logging and Google Sheets settings |
+| `agents.py` | Agent data types, conversation state, and LLM response generation, including the image-generating agent (stable v0.5 logic) |
+| `orchestrator.py` | Decides which agents respond and when, using an AI model and `@mentions` (stable v0.5 logic) |
+| `simulation.py` | Core loop connecting agents, orchestrator, user input, and logging |
+| `config_loader.py` | Reads and validates `config.yaml` into typed Python objects and gives `main.py` access to the `screens` texts |
+| `conversation_logger.py` | Saves conversation transcripts and study-flow events to `.txt` (and optionally `.json`) files |
+| `initial_prompt.txt` | A sample opening message you can copy-paste to start a conversation |
+| `multi_agent_chat_prototype_v1.html` | Static design prototype of the study screens (reference only; not used by the app) |
+| `run_chatbot.sh`, `test_gsheets.py` | Helper scripts for weekly restarts and for testing the Google Sheets connection |
+
+---
+
+## Prerequisites
+
+- **Python 3.10+**
+- An **OpenAI-compatible API endpoint** (OpenAI, vLLM, Ollama, TGI, etc.)
+- A valid API key for that endpoint
+
+## Quick Start
 
 ```bash
 pip install -r requirements.txt
-```
-*This installs FastAPI, Uvicorn, Jinja2, Pydantic, PyYAML, OpenAI client, and terminal color support. The process usually takes less than a minute.*
-
----
-
-### Step 6: Launch the Application
-
-You can launch the Interaction Portal in either **Standalone Test Mode** (zero setup, no API key) or **Real AI Mode** (using live models from Claude, ChatGPT / OpenAI, DeepSeek, GLM, or Qwen).
-
-#### Mode A: Standalone Test Mode (Recommended for Beginners & First-Time Testing)
-> **100% Free • Works completely offline • No API key needed • Interactive condition launcher**
-
-In this mode, the portal uses built-in, deterministic simulated AI responses. It launches an interactive browser **Test Launcher** where you can select any of the 10 experimental conditions (`PAS-COORD`, `EVA-TASK`, `GEN-DEV`, `NOAI`, etc.) with a single click—no Qualtrics account or API keys required.
-
-1. **Start the server:**
-
-   - **In Anaconda Prompt or Windows Command Prompt (`cmd.exe`):**
-     ```cmd
-     set PORTAL_STANDALONE=1
-     python -m app.main
-     ```
-
-   - **In Windows PowerShell:**
-     ```powershell
-     $env:PORTAL_STANDALONE="1"
-     python -m app.main
-     ```
-
-   - **On macOS / Linux:**
-     ```bash
-     export PORTAL_STANDALONE="1"
-     python -m app.main
-     ```
-
-2. **Open the portal in your browser:**
-   Open Google Chrome, Microsoft Edge, or Firefox and navigate to:
-   ```text
-   http://localhost:8000/
-   ```
-   *(or `http://127.0.0.1:8000/`)*
-
-3. **Experience the workflow:**
-   - The **Interaction Portal Test Launcher** will appear on your screen.
-   - Choose any experimental condition from the dropdown or click one of the quick-launch buttons.
-   - An interactive participant session starts immediately! You can chat with specialists (`@Nia`, `@Theo`, `@Rhys`, `@Mira`, `@team`), inspect the live Orchestrator coaching panel, review or author deliverable cards, and complete the post-task reflection check-ins.
-   - At the end of the session, the completion code is displayed directly on the exit screen without redirecting to Qualtrics.
-
----
-
-#### Mode B: Real AI Mode (Live LLM with API Key: Claude, ChatGPT, DeepSeek, GLM, Qwen)
-> **Multi-Provider Support • Real-Time Chat Streaming • Pinned Reproducible Models**
-
-In this mode, the portal connects to live frontier AI models from your chosen provider. Specialists brainstorm dynamically, answer tailored questions, and stream tokens live.
-
-##### Supported Providers & Configuration Reference
-
-| Provider | `PORTAL_LLM_PROVIDER` | Primary API Key Env | Fallback Env Vars | Default Model | Default Base URL |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude** (Anthropic) | `claude` | `ANTHROPIC_API_KEY` | `CLAUDE_API_KEY`, `PORTAL_LLM_API_KEY` | `claude-haiku-5-5` | `https://api.anthropic.com` |
-| **ChatGPT** (OpenAI) | `openai` *(or `chatgpt`)* | `OPENAI_API_KEY` | `CHATGPT_API_KEY`, `PORTAL_LLM_API_KEY` | `gpt-5.4-mini` | `https://api.openai.com/v1` |
-| **DeepSeek** | `deepseek` | `DEEPSEEK_API_KEY` | `PORTAL_LLM_API_KEY` | `deepseek-flash` | `https://api.deepseek.com` |
-| **GLM** (Z.ai, formerly Zhipu AI) | `glm` *(or `zhipu`, `zai`)* | `ZAI_API_KEY` | `GLM_API_KEY`, `ZHIPUAI_API_KEY`, `BIGMODEL_API_KEY`, `PORTAL_LLM_API_KEY` | `glm-5.3-flash` | `https://api.z.ai/api/paas/v4` |
-| **Qwen** (Alibaba Cloud Model Studio, also called DashScope) | `qwen` *(or `dashscope`)* | `DASHSCOPE_API_KEY` | `QWEN_API_KEY`, `PORTAL_LLM_API_KEY` | `qwen3.8-flash` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
-
-##### 1. Obtain an API Key from Your Preferred Provider
-- **Claude (Anthropic):** Sign up at [console.anthropic.com](https://console.anthropic.com/) and create an API key under **API Keys**.
-- **ChatGPT (OpenAI):** Sign up at [platform.openai.com](https://platform.openai.com/) and generate a key under **API Keys** (starts with `sk-...`).
-- **DeepSeek:** Sign up at [platform.deepseek.com](https://platform.deepseek.com/) and generate an API key under **API Keys**.
-- **GLM (Z.ai, formerly Zhipu AI):** Sign up at [z.ai](https://z.ai/) (or [bigmodel.cn](https://bigmodel.cn/)) and create an API key in the developer console.
-- **Qwen (Alibaba Cloud Model Studio / DashScope):** Sign up at [dashscope.aliyun.com](https://dashscope.aliyun.com/) (or the International portal) and generate a DashScope API key.
-
-##### 2. Launch the Application with Your Provider & Key
-
-Choose your provider and run the corresponding commands below:
-
-###### Option 1: Claude (Anthropic)
-- **Windows Command Prompt (`cmd.exe`) / Anaconda Prompt:**
-  ```cmd
-  set PORTAL_STANDALONE=1
-  set PORTAL_LLM_PROVIDER=claude
-  set ANTHROPIC_API_KEY=your-anthropic-key-here
-  python -m app.main
-  ```
-- **Windows PowerShell:**
-  ```powershell
-  $env:PORTAL_STANDALONE="1"
-  $env:PORTAL_LLM_PROVIDER="claude"
-  $env:ANTHROPIC_API_KEY="your-anthropic-key-here"
-  python -m app.main
-  ```
-- **macOS / Linux:**
-  ```bash
-  export PORTAL_STANDALONE="1"
-  export PORTAL_LLM_PROVIDER="claude"
-  export ANTHROPIC_API_KEY="your-anthropic-key-here"
-  python -m app.main
-  ```
-
-###### Option 2: ChatGPT / OpenAI
-- **Windows Command Prompt (`cmd.exe`) / Anaconda Prompt:**
-  ```cmd
-  set PORTAL_STANDALONE=1
-  set PORTAL_LLM_PROVIDER=openai
-  set OPENAI_API_KEY=sk-your-openai-key-here
-  python -m app.main
-  ```
-- **Windows PowerShell:**
-  ```powershell
-  $env:PORTAL_STANDALONE="1"
-  $env:PORTAL_LLM_PROVIDER="openai"
-  $env:OPENAI_API_KEY="sk-your-openai-key-here"
-  python -m app.main
-  ```
-- **macOS / Linux:**
-  ```bash
-  export PORTAL_STANDALONE="1"
-  export PORTAL_LLM_PROVIDER="openai"
-  export OPENAI_API_KEY="sk-your-openai-key-here"
-  python -m app.main
-  ```
-
-###### Option 3: DeepSeek
-- **Windows Command Prompt (`cmd.exe`) / Anaconda Prompt:**
-  ```cmd
-  set PORTAL_STANDALONE=1
-  set PORTAL_LLM_PROVIDER=deepseek
-  set DEEPSEEK_API_KEY=your-deepseek-key-here
-  python -m app.main
-  ```
-- **Windows PowerShell:**
-  ```powershell
-  $env:PORTAL_STANDALONE="1"
-  $env:PORTAL_LLM_PROVIDER="deepseek"
-  $env:DEEPSEEK_API_KEY="your-deepseek-key-here"
-  python -m app.main
-  ```
-- **macOS / Linux:**
-  ```bash
-  export PORTAL_STANDALONE="1"
-  export PORTAL_LLM_PROVIDER="deepseek"
-  export DEEPSEEK_API_KEY="your-deepseek-key-here"
-  python -m app.main
-  ```
-
-###### Option 4: GLM (Z.ai, formerly Zhipu AI)
-- **Windows Command Prompt (`cmd.exe`) / Anaconda Prompt:**
-  ```cmd
-  set PORTAL_STANDALONE=1
-  set PORTAL_LLM_PROVIDER=glm
-  set ZAI_API_KEY=your-zai-key-here
-  python -m app.main
-  ```
-  *(Note: `GLM_API_KEY` and `ZHIPUAI_API_KEY` are also automatically recognized as fallbacks).*
-- **Windows PowerShell:**
-  ```powershell
-  $env:PORTAL_STANDALONE="1"
-  $env:PORTAL_LLM_PROVIDER="glm"
-  $env:ZAI_API_KEY="your-zai-key-here"
-  python -m app.main
-  ```
-- **macOS / Linux:**
-  ```bash
-  export PORTAL_STANDALONE="1"
-  export PORTAL_LLM_PROVIDER="glm"
-  export ZAI_API_KEY="your-zai-key-here"
-  python -m app.main
-  ```
-
-###### Option 5: Qwen (Alibaba Cloud Model Studio / DashScope)
-- **Windows Command Prompt (`cmd.exe`) / Anaconda Prompt:**
-  ```cmd
-  set PORTAL_STANDALONE=1
-  set PORTAL_LLM_PROVIDER=qwen
-  set DASHSCOPE_API_KEY=your-dashscope-key-here
-  python -m app.main
-  ```
-- **Windows PowerShell:**
-  ```powershell
-  $env:PORTAL_STANDALONE="1"
-  $env:PORTAL_LLM_PROVIDER="qwen"
-  $env:DASHSCOPE_API_KEY="your-dashscope-key-here"
-  python -m app.main
-  ```
-- **macOS / Linux:**
-  ```bash
-  export PORTAL_STANDALONE="1"
-  export PORTAL_LLM_PROVIDER="qwen"
-  export DASHSCOPE_API_KEY="your-dashscope-key-here"
-  python -m app.main
-  ```
-  *(Note for China region users: to use the domestic endpoint instead of the international endpoint, set `DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`).*
-
-##### 3. Optional Custom Model & Endpoint Overrides
-You can override the model version or base URL for any provider without modifying configuration files:
-- **Override Model:** Set `PORTAL_LLM_MODEL` (e.g. `export PORTAL_LLM_MODEL="claude-3-5-sonnet-20241022"` or `export PORTAL_LLM_MODEL="gpt-4o"`).
-- **Override Endpoint / Base URL:** Set `PORTAL_LLM_BASE_URL` (e.g. for custom proxies, gateways, or local compatible servers).
-- **Universal API Key:** Alternatively, set `PORTAL_LLM_API_KEY`, which acts as a master key override across any active provider.
-
-##### 4. Access the Portal
-- Open `http://localhost:8000/` in your browser.
-- Select any condition in the launcher to begin interacting with live AI specialists powered by your chosen model provider.
-
-> [!TIP]
-> **Conducting a Formal Study with Qualtrics?**
-> When running a formal lab experiment where participants arrive from Qualtrics (with `?pid=...&condition=...`), set `PORTAL_STANDALONE=0` and configure production secrets. See [Section 4: Production Deployment & Database Administration](#4-production-deployment--database-administration) for full instructions on Qualtrics parameters, HMAC link signing, reverse proxies, and server-side completion verification.
-
----
-
-### Step 7: How to Stop the Application
-
-When you are finished using or testing the portal:
-1. Return to your terminal or Anaconda Prompt window.
-2. Press **`Ctrl + C`** on your keyboard.
-3. The server will shut down gracefully.
-
----
-
-### Beginner FAQs & Troubleshooting
-
-- **"Unable to connect" or "This site can’t be reached":**
-  - Ensure the terminal window where you ran `python -m app.main` is still open and displaying `Uvicorn running on http://127.0.0.1:8000`. Do not close that terminal while using the portal.
-- **"Address already in use" (Port 8000 is occupied):**
-  - Another application or a previous portal session is using port 8000. You can easily run on port 8080 instead:
-    - *Windows CMD / Anaconda Prompt:* `set PORTAL_PORT=8080` then `python -m app.main`
-    - *Windows PowerShell:* `$env:PORTAL_PORT="8080"` then `python -m app.main`
-    - *macOS / Linux:* `export PORTAL_PORT="8080"` then `python -m app.main`
-    - Then navigate to `http://localhost:8080/` in your browser.
-- **"Desktop Viewport Required" warning:**
-  - The study design requires a desktop screen resolution (minimum 900 pixels width). If your browser window is tiled or resized to half-screen, maximize the window.
-- **Where are the logs and experimental data saved?**
-  - All participant actions, chat messages, card edits, and timing metrics are automatically stored in an append-only SQLite database at `logs/portal.sqlite3`. You can view or export this data anytime (see [Section 3.3: Logs & Telemetry](#33-logs--telemetry--database-storage-how-to-open-and-read-logs)).
-
----
-
-## 1. Research Design & Conditions
-
-The experiment employs a $3 \times 3 + 1$ between-subjects factorial design (10 conditions total):
-- **Participant Role** (3 levels):
-  - **Passive (`PAS`)**: Read-only deliverable card; participant observes team drafting and submits.
-  - **Evaluative (`EVA`)**: Participant acts as reviewer using Keep, Cut, and Send-back controls on AI proposals.
-  - **Generative (`GEN`)**: Participant writes card content directly, supported by AI suggestions (must exceed a minimum typed share, default 25%).
-- **Orchestrator Panel Feedback** (3 levels):
-  - **Coordination (`COORD`)**: Status reports on specialist contributions and task assignments.
-  - **Task-Focused (`TASK`)**: Status reports plus diagnosis of what is missing or unverified on the deliverable card.
-  - **Developmental (`DEV`)**: Status, card diagnosis, plus recurring conceptual principles explaining why errors arise.
-- **No-AI Baseline (`NOAI`)**:
-  - No chat, no agents, no panel. The participant works through the client tasks using a four-part collapsible **Reference Pack** containing the exact source materials held across specialists.
-
-### Condition Matrix
-
-| Code | Role | Panel Level | Team Chat | Card Editor Mode |
-| :--- | :--- | :--- | :--- | :--- |
-| `PAS-COORD` | Passive | Coordination | Active | Read-only |
-| `PAS-TASK` | Passive | Task-Focused | Active | Read-only |
-| `PAS-DEV` | Passive | Developmental | Active | Read-only |
-| `EVA-COORD` | Evaluative | Coordination | Active | Keep / Cut / Send-back |
-| `EVA-TASK` | Evaluative | Task-Focused | Active | Keep / Cut / Send-back |
-| `EVA-DEV` | Evaluative | Developmental | Active | Keep / Cut / Send-back |
-| `GEN-COORD` | Generative | Coordination | Active | Typing + AI suggestions (min 25% typed) |
-| `GEN-TASK` | Generative | Task-Focused | Active | Typing + AI suggestions (min 25% typed) |
-| `GEN-DEV` | Generative | Developmental | Active | Typing + AI suggestions (min 25% typed) |
-| `NOAI` | None | None | Disabled | Reference pack + manual authoring |
-
----
-
-## 2. Architecture & Folder Structure
-
-```text
-interaction_portal/
-├── app/                  # Application runtime and backend mechanics (core platform code)
-│   ├── agents/           # LLM adapters, schemas, specialists, orchestrator, panel validator & PII safeguards
-│   ├── harnesses/        # Automated verification harnesses (Harness A & Harness B)
-│   ├── simulation/       # State coordination, card provenance, chat routing, practice
-│   ├── static/           # Client-side CSS styling and vanilla JS (telemetry, editor, chat)
-│   ├── templates/        # Jinja2 HTML templates for each experimental screen
-│   ├── tools/            # Standalone maintenance CLIs (backup, verify_db, purge_pii)
-│   ├── config_loader.py  # Configuration parser, SHA-256 fingerprinting and validator
-│   ├── event_store.py    # Append-only SQLite telemetry database engine with optimistic locking
-│   ├── main.py           # FastAPI web application factory & routes
-│   ├── state_machine.py  # Forward-only page flow engine, Latin square balancer & authoritative timers
-│   └── terminal.py       # Cross-platform console color handling and ANSI filter stream
-├── app_build/            # Isolated sandbox for newly generated apps from the autonomous developer pipeline
-├── production_artifacts/ # Inter-agent handover documents (e.g., Technical_Specification.md)
-├── .agents/              # Antigravity agentic AI workflows, skills, rules, and persistent memory
-│   ├── agents/           # Specialized agent personas (@pm, @engineer, @qa, @devops)
-│   ├── memory/           # Hermes memory subsystem (USER.md, MEMORY.md, and session digests)
-│   ├── rules/            # Always-on behavioral rules (hermes_learning_loop.md, hermes_memory_protocol.md)
-│   ├── scripts/          # Standalone helper utilities (hermes_memory_search.py)
-│   ├── skills/           # Modular on-demand skills (startcycle, learn, refine_skill, recall, write_specs)
-│   ├── workflows/        # Backward-compatible Codelab workflow macros
-│   └── agents.md         # Consolidated team identity file
-├── config/               # Experiment content, prompts, condition matrix, UI text, and parameters
-│   ├── conditions.yaml   # 10 condition definitions (role × panel level)
-│   ├── config.yaml       # Master configuration file (UI text, timers, card fields, practice)
-│   ├── content/clients/  # Client folders (C1..C7) with public briefs and private materials
-│   └── prompts/          # System prompts, orchestrator planning prompts, panel level templates
-│       ├── panel_levels/ # Panel level templates (coordination.md, task_focused.md, developmental.md, _common.md)
-│       └── panel_compress.md # Fallback compression prompt for panel length budget
-├── logs/                 # Telemetry database storage (portal.sqlite3)
-├── tests/                # Automated pytest unit and integration test suite (83 tests)
-├── GEMINI.md             # Project overview and conventions for agentic AI pair programming
-├── md_to_pdf.py          # Documentation export utility (converts README.md to PDF)
-├── requirements.txt      # Python dependencies
-└── README.md             # This documentation file
+python main.py
 ```
 
----
+Open the URL printed in the terminal (e.g. `http://127.0.0.1:7860`) in your browser.
 
-## 3. Detailed Guide to Each Folder
+To use a different configuration file:
 
-### 3.1 `app/` — Application Engine (For the Application Hoster)
-**Intention & Purpose:**
-The `app/` directory contains the core FastAPI web application and simulation runtime. It manages client sessions, coordinates team chat streaming via NDJSON, enforces authoritative wall-clock server timers, tracks span-by-span deliverable card provenance, and logs fine-grained telemetry to SQLite.
+```bash
+python main.py --config path/to/custom_config.yaml
+```
 
-**Why Minimal Tweaking is Needed:**
-The code in `app/` is designed as a generic, headless experimental motor. All experiment-specific wording, prompts, client briefs, agent personalities, and timing parameters are completely decoupled into `config/`. As an application hoster or sysadmin, you do not need to modify Python code in `app/` under normal operation. You only need to configure standard deployment environment variables (host, port, API keys, secret cookies) and run the service.
 
-**Core Submodules:**
-- `app/agents/`: LLM client interfaces (`OpenAICompatClient` for ChatGPT, DeepSeek, GLM, Qwen; `ClaudeClient` for Anthropic Claude; and deterministic `MockClient`), Pydantic output schemas, keyword domain classifiers (`topics.py`), deterministic hidden-item disclosure detector (`disclosure.py`), orchestrator panel validator and proportional trim engine (`panel_validator.py`), and PII redaction safeguard (`pii.py`).
-- `app/simulation/`: Multi-client session manager (`session_manager.py`), card span provenance and role authoring rules (`card_provenance.py`), `@mention` chat routing and folded internal block grouper (`chat_router.py`), and scripted onboarding practice (`practice.py`).
-- `app/event_store.py`: Append-only SQLite data store equipped with SQL triggers that abort any `UPDATE` or `DELETE` statements on events, with optimistic version locking.
-- `app/state_machine.py`: Deterministic forward-only state progression engine ensuring participants cannot jump backwards or reset timers via browser reloads, backed by counterbalanced Latin square client assignment.
-- `app/main.py`: FastAPI application factory, signed session cookie management, streaming endpoints, and header-authenticated data export handlers.
-- `app/terminal.py`: Terminal execution initialization (`app.terminal.init_terminal()`), Windows Virtual Terminal (VT) color detection, and fallback ANSI filter stream.
-- `app/tools/`: Operational and administrative CLI tools:
-  - `backup.py`: Online non-blocking SQLite database backup using SQLite's backup API, integrity check verification (`PRAGMA integrity_check`), gzip compression, and SHA-256 checksum manifest.
-  - `verify_db.py`: Database verification script checking append-only SQL triggers, foreign keys, table schemas, row counts, and monotonic event ordering per session.
-  - `purge_pii.py`: Participant text redaction and PII purging maintenance script that temporarily drops and re-establishes append-only SQL triggers inside an atomic logged transaction.
-- `app/static/` & `app/templates/`: Dependency-free vanilla JavaScript (attention telemetry, card editor, auto-expanding chat) and clean semantic Jinja2 HTML templates.
+## Configuration Guide
+
+Everything is controlled by `config.yaml`. Below is a plain-language tour of every section, what each setting does, and what happens when you change it.
 
 ---
 
-### 3.2 `config/` — Study Configuration & Customization (For the Researcher / Coder)
-**Intention & Purpose:**
-The `config/` directory is the single source of truth for the entire study. Everything participant-facing or model-facing lives here. By modifying these YAML and Markdown files, researchers can update screen text, rewrite prompts, adjust timers, or add entirely new client tasks without touching the Python backend.
+### API
 
-#### How to Update and Tweak Configurations:
+```yaml
+api:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-..."
+  organization: null
+  timeout: 60
+  agent_model: "gpt-4o"
+  orchestrator_model: "gpt-4o-mini"
+```
 
-1. **Screen Text and Wording (`config/config.yaml` $\to$ `pages:`):**
-   - All text displayed to participants across all 11 screens is defined under the `pages` dictionary in `config/config.yaml`.
-   - **Common captions:** `pages.common.continue`, `pages.common.submit`, `pages.common.unlocks_in`.
-   - **Screen-specific instructions:**
-     - `pages.orientation`: Orientation notes, privacy policy text, and requirement lists.
-     - `pages.team`: Descriptions of specialists and the orchestrator card.
-     - `pages.role`: Explanations for Passive, Evaluative, and Generative roles.
-     - `pages.task`: Chat placeholders, unknown mention error templates, and card status notices.
-     - `pages.checkin`: Post-task survey questions (`ci1`..`ci5`), Likert scale ranges, and multiple-choice options.
-     - `pages.break`: Break instructions and early-finish button text.
-     - `pages.exit`: Completion thank-you message and Qualtrics return instructions.
+| Setting | What it does |
+|---|---|
+| `base_url` | The address of the AI model server. Use `https://api.openai.com/v1` for OpenAI, or the address of your local model (e.g. Ollama). |
+| `api_key` | Your secret key for that API. Keep this private. |
+| `organization` | Optional organization ID (OpenAI-specific; ignored by most other APIs). Use `null` if not needed. |
+| `timeout` | How many seconds to wait before giving up on a slow model response. Increase this (e.g. to `120`) if you see timeout errors. |
+| `agent_model` | The AI model used by every agent to generate their chat replies. A smarter model (e.g. `gpt-4o`) produces more natural, nuanced responses but costs more and is slightly slower. |
+| `orchestrator_model` | The AI model used to decide *who* speaks next. This task is simpler, so a smaller/faster model (e.g. `gpt-4o-mini`) works well and is cheaper. |
 
-2. **Agent Behavior & System Prompts (`config/prompts/`):**
-   - **Specialists (`config/prompts/specialists_system.md`):** System prompt defining the specialist's role, behavioral boundaries, JSON response schema, refusal rules for out-of-domain questions, and prohibitions on unprompted disclosure.
-   - **Orchestrator Planning (`config/prompts/orchestrator_plan.md`):** Instructions guiding how the Orchestrator assigns tasks to specialists during opening rounds and coordination bursts.
-   - **Orchestrator Panels (`config/prompts/panel_levels/`):**
-     - `coordination.md`: Prompts the model to report specialist activity and contributions.
-     - `task_focused.md`: Instructs the model to diagnose what is missing or unverified on the deliverable card against brief requirements.
-     - `developmental.md`: Instructs the model to explain the recurring conceptual rationale for common errors.
-     - `_common.md`: Shared panel constraints, including the strict 60–80 word budget, forbidden imperative language, and required section headers.
-   - **Fallback Panel Compression (`config/prompts/panel_compress.md`):** Fallback compression prompt triggered if initial panel output exceeds the word budget.
+#### Image API
 
-3. **Client Tasks & Hidden Materials (`config/content/clients/`):**
-   - Seven client tasks (`C1` through `C7`) are provided by default. Each folder contains:
-     - `brief.md`: Public client brief with frontmatter `requirements: [...]` that participants read.
-     - `private/nia.md`, `private/theo.md`, `private/rhys.md`, `private/mira.md`: Private materials held exclusively by each specialist.
-     - **Hidden Items:** Marked in private files using HTML comments:
-       ```markdown
-       <!-- hidden:C1-H1 -->
-       The client privately stated that they will not accept any video shorter than 30 seconds.
-       <!-- /hidden:C1-H1 -->
-       ```
-       These markers allow the system to automatically track whether a specialist has disclosed a hidden constraint.
-   - **Adding a New Client:** Create `config/content/clients/C8/` with `brief.md` and the 4 `private/*.md` files, then add `C8` to `clients.randomised` in `config/config.yaml`.
+```yaml
+image_api:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-..."
+  model: "gpt-image-1"
+  dummy_image_url: "https://..."
+```
 
-4. **Timers & Pacing (`config/config.yaml` $\to$ `timers:`):**
-   - `timers.task_seconds`: Duration of each client task (default `600` = 10 minutes).
-   - `timers.break_seconds`: Mid-session break duration after client 3 (default `120` = 2 minutes).
-   - `timers.orientation_min_seconds`: Minimum reading lockout before "Continue" unlocks (default `15`).
-   - `timers.resume_gap_seconds`: Participant inactivity cutoff (default `900` = 15 minutes). After this window, re-entry is blocked as `abandoned_timeout`.
-   - `testing.timer_scale`: Global speed multiplier for testing (e.g. set to `10.0` or `100.0` to shrink timers for rapid walkthroughs).
-
-5. **Conditions Matrix (`config/conditions.yaml`):**
-   - Maps condition codes (`PAS-COORD`, `EVA-TASK`, `GEN-DEV`, `NOAI`, etc.) to their active parameters (`role`, `panel_level`, `ai`).
-
-6. **Card Editor & Anti-Gaming Safeguards (`config/config.yaml` $\to$ `editor:`):**
-   - `editor.allow_paste`: Toggles whether pasting into deliverable card fields is permitted (default `true`). When active, pasted text is logged (`card_paste` / `paste_chars`) and audited under strict typed share metrics (`typed_share_strict`), filtering out unoriginal filler and AI-copied content.
-   - `editor.max_span_chars`: Maximum character cap per card field (default `600`), enforced with live UI counters and server-side validation.
-
-7. **LLM Provider Compatibility Flags (`config/config.yaml` $\to$ `llm:`):**
-   - `llm.supports_stream_usage`: Configures whether the upstream endpoint accepts `stream_options` for token consumption.
-   - `llm.token_param`: Selects either `max_tokens` or `max_completion_tokens` based on provider requirements.
-   - `llm.send_temperature`: Controls whether temperature is sent in request payloads for newer model families with fixed temperatures.
+| Setting | What it does |
+|---|---|
+| `base_url` / `api_key` | Endpoint and key of the image-generation API used by the agent with the `image_generator` role. |
+| `model` | The image model used to generate images. |
+| `dummy_image_url` | Image shown instead of a generated one when the image API is not reachable (useful for testing without an image API key). |
 
 ---
 
-### 3.3 `logs/` — Telemetry & Database Storage (How to Open and Read Logs)
-**Intention & Purpose:**
-The `logs/` folder stores the append-only SQLite database (`logs/portal.sqlite3`). This database logs every participant action, agent reply, card edit diff, scroll sample, window blur/focus event, and card submission with millisecond UTC timestamps.
+### Scenario
 
-#### Database Tables Overview:
-- `events`: Core telemetry stream (`pid`, `timestamp`, `received_at`, `client_id`, `page_id`, `event_type`, `autopilot`, `metadata` JSON). SQL triggers prevent any modification or deletion.
-- `sessions`: Participant session metadata (`pid`, `condition_code`, `started_at`, `ended_at`, `end_state`, `resume_count`, `completion_code`, `autopilot`, `version`, `resume_token`, `verify_count`, `config_sha256`, `state` JSON).
-- `transcripts`: Full chronological chat transcripts per participant and client task, including private folded blocks.
-- `panels`: Snapshots of every Orchestrator side-panel generated (`level`, `text`, `word_count`, `sections_present`, `validation_errors`, `retried`, `truncated`).
-- `cards`: Final and intermediate deliverable cards with span-by-span author attribution and history.
-- `assignments`: Counterbalanced Latin square client assignment tracking table.
+```yaml
+ui:
+  task_description: |
+    In this task, you will collaborate with four AI agents to design a ...
+scenario:
+  agent_extra_system_prompt: >-
+    The user's name is {user_name}. ...
+```
 
-#### How to Open and Inspect Logs:
+| Setting | What it does |
+|---|---|
+| `ui.task_description` | The task that all agents read as background context (it is appended to every agent's prompt and added to the conversation as the first system message). It is also shown on the Briefing screen (one paragraph per line), in the Task panel of the live task and, if `ui.show_task_description` is `true`, on the login screen. Change this to completely change the simulation setting (e.g. a hospital team meeting, a university seminar, a startup pitch). |
+| `scenario.agent_extra_system_prompt` | Extra instructions appended to *every* agent's personality. For example, it currently tells agents to keep language accessible and not answer questions directed at you. Edit this to globally tweak agent behaviour without touching each agent individually. |
 
-1. **Option A: DB Browser for SQLite (Recommended GUI)**
-   - Download and open [DB Browser for SQLite](https://sqlitebrowser.org/).
-   - Open `interaction_portal/logs/portal.sqlite3`.
-   - Navigate to the **Browse Data** tab to view tables, or use **Execute SQL** to run queries.
+**Example — changing the scenario:**
 
-2. **Option B: Command Line (`sqlite3`)**
+Replace the `ui.task_description` with:
+
+```yaml
+task_description: |
+  You are a medical student presenting a clinical case to a group of supervising
+  doctors. The team will question your diagnosis and treatment plan. Show your
+  reasoning clearly.
+```
+
+The agents will start working on this new task. Also adapt the matching texts in the `screens` section (for example the check questions and the Task "Goal" text) and the agents' own prompts.
+
+---
+
+### Agents
+
+```yaml
+agents:
+  - name: "Alice"
+    role: "supporter"
+    title: "senior engineer"
+    description: "Specializes in advertising strategy and audience insights..."
+    card_description: "Provides a strategic framework for the campaign."
+    chat_color: "#d4f5d4"
+    talkativeness: 0.75
+    temperature: 0.8
+    max_tokens: 256
+    system_prompt: >
+      You are Alice, a supportive senior engineer...
+```
+
+Each agent entry controls one character. You can add as many agents as you like, or remove any of the defaults.
+
+| Setting | What it does |
+|---|---|
+| `name` | The agent's display name in the chat. Must be unique. If it matches your login name, the app renames it automatically to avoid confusion. |
+| `role` | Guides the orchestrator on when to pick this agent. See the role table below. |
+| `title` | Short job title shown after the name in parentheses in the chat (e.g. "Alice (senior engineer)"), and as the subtitle of the agent cards. Purely cosmetic. |
+| `description` | Longer description of what the agent does. Shown on the agent cards (Meet team screen and the Agents panel of the live task) unless a `card_description` is given. |
+| `card_description` | Optional shorter description used on the agent cards, so that all cards have a similar length (the Check 2 questions state that the descriptions are of approximately equal length). Remove it to show the full `description`. |
+| `chat_color` | Background colour of this agent's message bubble. Any CSS colour works (e.g. `"#d4f5d4"`, `"lightblue"`). |
+| `talkativeness` | A number from `0.0` to `1.0`. Higher = more likely to jump into the conversation unprompted. An agent that is directly addressed always responds regardless of this value. |
+| `temperature` | How "creative" or varied the replies are. `0.0` = very consistent and focused. `1.0`+ = more spontaneous and varied. Values around `0.7`–`0.9` feel natural. |
+| `max_tokens` | The maximum length of a single reply, measured in tokens (roughly ¾ of a word each). `128` keeps replies short. `512` allows longer, more detailed responses. |
+| `system_prompt` | The agent's personality description — who they are, how they speak, and any hard rules. This is the most powerful thing to customise. |
+
+**Example — making an agent quieter:**
+
+```yaml
+- name: "Bob"
+  talkativeness: 0.2   # Was 0.6 — Bob will now rarely speak unless addressed
+  temperature: 0.5     # Was 0.9 — replies will be more predictable
+  max_tokens: 128      # Was 256 — replies will be shorter
+```
+
+**Example — adding a new agent:**
+
+```yaml
+- name: "Priya"
+  role: "mediator"
+  title: "project manager"
+  chat_color: "#fde8f5"
+  talkativeness: 0.6
+  temperature: 0.75
+  max_tokens: 256
+  system_prompt: >
+    You are Priya, a calm and experienced project manager. You keep discussions
+    on track, summarise points of agreement, and gently redirect when the
+    conversation gets stuck. You speak in short, clear sentences.
+```
+
+#### Agent Roles
+
+The `role` field tells the orchestrator *when* to prioritise an agent:
+
+| Role | When this agent is more likely to speak |
+|---|---|
+| `challenger` | When there are unexplored alternatives or a decision seems rushed |
+| `comedian` | When the mood needs lightening with humor |
+| `creative` | When generating novel ideas and brainstorming |
+| `devil_advocate` | When specifically challenging rapid consensus |
+| `expert` | When deep domain knowledge and facts are needed |
+| `image_generator` | Reserved for generating images (e.g., Picasso) |
+| `manager` | When driving next steps and action items |
+| `mediator` | When participants disagree or the conversation gets tense |
+| `quiet_observer` | Almost never — only when directly asked a question |
+| `skeptic` | When someone makes a bold claim or proposal that needs scrutiny |
+| `summarizer` | When concluding long debates and aligning the team |
+| `supporter` | When someone shares a good idea or needs encouragement |
+| `user_proxy` | When evaluating ideas from the end-user's point of view |
+
+---
+
+### Orchestrator
+
+The orchestrator is the invisible "director" that reads the conversation after each message and decides which agents speak next. You rarely need to change these settings, but here is what they do:
+
+```yaml
+orchestrator:
+  max_agent_turns: 4
+  max_orchestrator_rounds: 1
+  min_responders: 1
+  response_threshold: 0.4
+  high_relevance_threshold: 0.75
+  base_vocal_factor: 0.7
+  temperature: 0.3
+  max_tokens: 200
+  context_window: 15
+  agent_context_window: 40
+  system_prompt: |
+    You are a conversation orchestrator ...
+```
+
+| Setting | What it does | Effect of increasing |
+|---|---|---|
+| `max_agent_turns` | Max number of agents that can reply per orchestrator round. Together with `max_orchestrator_rounds` it sets the maximum number of agent replies per user message (`max_agent_turns × max_orchestrator_rounds`) | More agents reply per message (chattier) |
+| `max_orchestrator_rounds` | How many times the orchestrator can run per user message (agents can respond to each other) | More back-and-forth among agents before the conversation returns to you |
+| `min_responders` | Minimum number of agents guaranteed to reply to each message | Prevents awkward silences; raise to `2` for a livelier discussion |
+| `response_threshold` | An agent is selected if its relevance score is at or above this value (0–1). | Lower = more agents reply to everything; higher = only the most relevant agents speak |
+| `high_relevance_threshold` | If an agent's relevance score meets this, they always reply regardless of talkativeness | Lower = more agents are considered "important enough" to override talkativeness |
+| `base_vocal_factor` | A global multiplier that dampens how often agents volunteer to speak | Lower = quieter simulation overall |
+| `temperature` | How varied the orchestrator's decisions are | Higher = less predictable turn-taking |
+| `max_tokens` | Maximum length of the orchestrator's answer (its JSON decision) | Rarely needs changing |
+| `context_window` | How many recent messages the orchestrator reads when deciding | Higher = longer memory for context, slower decision |
+| `agent_context_window` | How many recent messages each agent reads when writing a reply | Higher = agents remember more of the conversation, slower and costlier replies |
+| `system_prompt` | The instruction text sent to the orchestrator model. Placeholders: `{user_name}`, `{last_speaker}`, `{response_threshold}`, `{high_relevance_threshold}`, `{max_agent_turns}`, `{min_responders}`; use `{{` and `}}` for literal braces | Edit to change how the orchestrator weighs roles and patience rules |
+
+**Example — creating a very focused, one-at-a-time conversation:**
+
+```yaml
+orchestrator:
+  max_agent_turns: 1
+  max_orchestrator_rounds: 1
+  min_responders: 1
+  response_threshold: 0.6
+  base_vocal_factor: 0.5
+```
+
+Only the single most relevant agent speaks per message, and agents are generally less eager to jump in.
+
+**Example — creating a lively, multi-voice discussion:**
+
+```yaml
+orchestrator:
+  max_agent_turns: 3
+  max_orchestrator_rounds: 2
+  min_responders: 2
+  response_threshold: 0.3
+  base_vocal_factor: 0.9
+```
+
+Up to three agents reply per round, the orchestrator runs twice so agents can respond to each other, and at least two agents are guaranteed to reply to every message.
+
+---
+
+### Screens (all study-screen text)
+
+Everything the participant reads in the study flow is defined in the `screens` section of `config.yaml`. To change the wording of a screen, edit it there; no change in `main.py` is needed.
+
+```yaml
+screens:
+  common:        # "Previous" and "Continue" captions
+  topbar:        # progress-bar labels (Consent, Briefing, Check 1, ...)
+  event_log:     # caption of the event-log drawer
+  login:         # field labels, placeholders, button, error messages
+  consent:       # title, paragraphs, checkbox label, warning
+  briefing:      # title and body (uses {task_description})
+  check1:        # title, intro, buttons, result messages, questions + answers
+  team:          # title, intro, note, shuffle button, coordinator agent name
+  check2:        # same structure as check1
+  tutorial:      # title, send button, and the texts of the 4 practice steps
+  manipulation:  # title, reflection texts, conditions 1-4
+  check3:        # title, intro, scale labels, messages, Likert items
+  live:          # welcome text, panel titles, tips, buttons, poster messages
+  debrief:       # title, paragraphs, link text, prototype note
+```
+
+| What you want to change | Where |
+|---|---|
+| Button captions ("Previous", "Continue", "Check answers", "Send practice message", "Pause", "Resume", "Send", "Finish task", ...) | `screens.common`, and the `*_button` keys of each screen |
+| A check question or its answers | `screens.check1.questions` / `screens.check2.questions` (each question has an `id`, a `title`, `options` with an `id` and `text`, the `correct` option id, an optional `shuffle` (true/false, default true) for shuffling that question's answers, and an optional `layout` (`vertical` = top to bottom, `horizontal` = left to right; default `vertical`); the number of questions can be changed) |
+| The Likert items or the scale labels | `screens.check3.items` (each with an `id`, `text` and `layout`, default `horizontal`) / `screens.check3.scale` |
+| The leadership-role conditions | `screens.manipulation.conditions` (`reflection: true` requires a written reflection) |
+| The tutorial instructions and the agent to @mention | `screens.tutorial.step1` ... `step4` |
+| Which agent is shown on top of the team page | `screens.team.coordinator_agent` |
+
+Notes:
+- Keys that end in `_html`, and the `paragraphs` and `body_html` entries, may contain simple inline HTML such as `<strong>...</strong>`. All other text is shown as plain text.
+- Some texts contain `{placeholders}` (for example `{user_name}`, `{max_length}`, `{min_length}`, `{count}`); the available ones are listed in the comments next to the entry in `config.yaml`.
+- Agent names, titles and descriptions on the team page and in the live task come from the `agents` section, not from `screens`.
+
+---
+
+### Logging
+
+```yaml
+logging:
+  output_dir: "conversations"
+  save_json: true
+```
+
+| Setting | What it does |
+|---|---|
+| `output_dir` | Folder where transcripts are saved. Each session creates a new file named with the (UTC) date and time (e.g. `2025-06-01_14-30-00.txt`). The transcript also contains the study-flow events. |
+| `save_json` | If `true`, a machine-readable `.json` file is saved alongside the text file. Useful if you want to analyse conversations programmatically. |
+
+---
+
+### UI
+
+```yaml
+ui:
+  title: "Multi-Agent Leadership Simulation"
+  chatbot_height: 500
+  task_panel_height: 560
+  task_panel_width: 18
+  agents_panel_height: 340
+  agents_panel_width: 18
+  tips_panel_height: 200
+  tips_panel_width: 18
+  server_port: 7860
+  share: false
+  password: "admin"
+  live_typing_delay: 0.12
+  true_delay_min: 0.0
+  true_delay_max: 0.0
+  user_typing_pause_seconds: 0.0
+  input_placeholder: "Type your message..."
+  max_username_length: 16
+  user_chat_color: "#e9eefc"
+  show_task_description: false
+  task_description_title: "📋 Task Description"
+  task_description: |
+    In this task, you will collaborate with four AI agents ...
+  greetings: ["Hello", "Hi", "Hola", ...]
+  pause_border_color: "rgba(255, 165, 0, 1.0)"
+  pause_animation_duration_seconds: 1.5
+  backup_names: ["Eve", "Frank", ...]
+  show_prototype_note: true
+  min_reflection_length: 20
+  exit_survey_url: "https://example.qualtrics.com/jfe/form/SV_demo?participant_id={session_id}"
+```
+
+| Setting | What it does |
+|---|---|
+| `title` | The heading shown at the top of the page. |
+| `chatbot_height` | Height of the chat window in pixels. Increase for a taller window. |
+| `task_panel_height` / `task_panel_width` | Height (in pixels, or a CSS string like `"560px"`) and width (as a percentage of the row, or a CSS string like `"18%"` / `"260px"`) of the "Task" panel on the Live task screen. |
+| `agents_panel_height` / `agents_panel_width` | Height (in pixels or CSS string) and width (percentage or CSS string) of the "Agents" panel on the Live task screen. |
+| `tips_panel_height` / `tips_panel_width` | Height (in pixels or CSS string) and width (percentage or CSS string) of the "Tips" panel on the Live task screen. The middle chat column automatically fills the remaining width (`100% - task_panel_width - max(agents_panel_width, tips_panel_width)`). |
+| `user_chat_color` | Background colour of the participant's own messages in the live chat (agents use their own `chat_color`). |
+| `server_port` | The local port the web server runs on. Change if port 7860 is already in use. |
+| `share` | If `true`, Gradio creates a temporary public link so others can access your simulation from anywhere. Useful for remote studies. |
+| `password` | A password required at login. Leave blank (`""`) to disable. |
+| `live_typing_delay` | Seconds between each word chunk appearing as the agent "types". `0.03` = very fast. `0.15` = slow, human-like. Default `0.12` feels natural. |
+| `true_delay_min` / `true_delay_max` | Random wait (in seconds) before an agent starts typing. Simulates a realistic "thinking" pause. Both `0.0` means agents start instantly. |
+| `user_typing_pause_seconds` | How long agents wait after you clear the text box (without sending) before they continue speaking. |
+| `max_username_length` | Maximum number of characters allowed in the login name. |
+| `show_task_description` | Whether the task description box is shown on the login screen (`true`/`false`). It does not affect the Briefing screen or the live task. Currently `false`. |
+| `task_description_title` | Heading of the task description box on the login screen (only used if `show_task_description` is `true`). |
+| `task_description` | The task text; see [Scenario](#scenario). |
+| `greetings` | List of random welcome phrases shown after you log in. |
+| `pause_border_color` | Colour of the glowing border that appears when you click Pause. Any CSS colour works. |
+| `pause_animation_duration_seconds` | How fast the pause glow pulses (in seconds per cycle). |
+| `input_placeholder` | Placeholder text of the message box in the live chat. |
+| `backup_names` | Names used to rename an agent whose name equals the participant's name. |
+| `show_prototype_note` | Whether the "Prototype note" boxes are shown on the Role and Debrief screens. |
+| `min_reflection_length` | Minimum number of characters of the written reflection (for the conditions that require one). |
+| `exit_survey_url` | Link on the Debrief screen. `{session_id}` is replaced by the session ID of the participant. |
+
+**Example — making the typing feel more human:**
+
+```yaml
+live_typing_delay: 0.08       # Slightly faster typing
+true_delay_min: 0.5           # Wait at least 0.5s before starting to type
+true_delay_max: 2.0           # Wait up to 2s (random per agent)
+```
+
+This makes agents pause before responding and then type at a moderate speed, which feels much more like a real conversation.
+
+---
+
+### Google Sheets Integration (optional)
+
+```yaml
+google_sheets:
+  spreadsheet_id: "..."
+  sheet_name: "Sheet1"
+  cell: "A1"
+  credentials_file: "service_account.json"
+```
+
+When `share: true`, the public Gradio URL is automatically written to the specified cell in your Google Sheet. This is useful for research studies where you need to share the current link with participants. Gradio share links last for up to 7 days, so for long-running deployments, you must schedule a restart every week.
+
+**Setup:**
+1. `pip install gspread`
+2. Create a Google Cloud service account and download its JSON key.
+3. Share your spreadsheet with the service account's email address `client_email` (give it "Editor" permissions). If you do not do this, you will get a `403 The caller does not have permission` error.
+4. Fill in the fields above.
+
+**Weekly Automatic Restart (Linux/Raspberry Pi):**
+Because Gradio share links expire after 7 days, you can automate a weekly restart using Cron so your Google Sheet always has a fresh, working link.
+
+1. Ensure the `run_chatbot.sh` script in this repository has the correct paths for your conda environment and project directory.
+2. Make the script executable:
    ```bash
-   sqlite3 logs/portal.sqlite3
+   chmod +x run_chatbot.sh
    ```
-   Useful SQL queries:
-   ```sql
-   -- View recent participant events
-   SELECT timestamp, pid, page_id, event_type, metadata 
-   FROM events 
-   ORDER BY id DESC LIMIT 20;
-
-   -- Check submitted cards with typed share percentage
-   SELECT pid, client_id, timestamp, json_extract(card, '$.typed_share') AS typed_share 
-   FROM cards;
-
-   -- Check post-task check-in responses
-   SELECT timestamp, pid, client_id, json_extract(metadata, '$.item_id') AS item, json_extract(metadata, '$.value') AS answer 
-   FROM events 
-   WHERE event_type = 'checkin_answer';
-   ```
-
-3. **Option C: Direct Web Data Exports & Admin Dashboard**
-   While the server is running, download structured data directly via protected admin endpoints using `PORTAL_ADMIN_TOKEN`. For security, tokens are passed via headers (`x-admin-token` or `Authorization: Bearer <token>`) rather than URL query parameters.
-
-   **Exporting Flat CSV and JSON Data:**
+3. Open your crontab editor:
    ```bash
-   # Export raw events as CSV
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/events.csv -o events.csv
-
-   # Export flat transcripts CSV (all turns & folded bursts)
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/transcripts.csv -o transcripts.csv
-
-   # Export panels CSV
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/panels.csv -o panels.csv
-
-   # Export card spans CSV (one row per span with full history)
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/card_spans.csv -o card_spans.csv
-
-   # Export wide check-in survey CSV
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/checkins.csv -o checkins.csv
-
-   # Export sessions summary CSV
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/sessions.csv -o sessions.csv
-
-   # Export complete database dump as JSON
-   curl.exe -H "x-admin-token: YOUR_ADMIN_TOKEN" http://127.0.0.1:8000/admin/export/all.json -o all_data.json
+   crontab -e
    ```
-
-   **Interactive Admin Dashboard (`/admin`):**
-   The `/admin` route provides a live monitoring dashboard for laboratory sessions, displaying:
-   - Active participant sessions (condition, current page, active client, remaining time, error count).
-   - Condition balance counts across all started sessions.
-   - Live model latency and failure metrics.
-   - Abandon/End session controls for stuck participants.
-
-   **Server Health & Completion Verification:**
-   - `GET /admin/health`: Returns JSON with active background queue length and p95 model latency.
-   - `GET /verify?pid=PID&code=CODE` (or `GET /api/verify`): Returns `{valid: true, end_state: "completed"}` for server-side verification by Qualtrics Web Service or researcher scripts.
-
----
-
-### 3.4 `app/harnesses/` — Automated Verification Test Harnesses
-**Intention & Purpose:**
-These harnesses provide automated verification of information boundaries and simulation stability **before** running human participants. They are rerun whenever model versions or system prompts are modified.
-
-#### 1. Harness A: Behavioural Rules & Boundary Verification (`app/harnesses/harness_a.py`)
-Executes an automated battery of adversarial probes against specialists and the Orchestrator to verify 4 behavioral rules:
-- **Rule 1 (No Unstated Facts):** Specialists never invent client facts not present in their private materials.
-- **Rule 2 (No Unasked Disclosure):** Specialists do NOT disclose hidden items during general questions or broadcasts; disclosure only occurs when explicitly asked about that specific topic.
-- **Rule 3 (No Domain Crossover):** Specialists decline and redirect questions outside their designated domain (e.g. Nia asked about budget declines and redirects to Mira).
-- **Rule 4 (No Orchestrator Hallucination):** The Orchestrator asserts no client facts, holds no private material, and assigns work based solely on the public brief.
-
-**How to run:**
-```bash
-# Test single client (C1)
-python -m app.harnesses.harness_a --config config/config.yaml --client C1
-
-# Test all clients (C1 through C7)
-python -m app.harnesses.harness_a --client all
-```
-*Outputs a structured test report (`harness_a_report.json`) with pass/fail status per probe.*
-
-#### 2. Harness B: Autopilot End-to-End Simulation (`app/harnesses/harness_b.py`)
-Replaces the human participant with an automated scripted driver to execute complete sessions end-to-end:
-- Exercises orientation, team, role, and scripted practice onboarding (including role checks).
-- Triggers opening bursts, verifies folded block generation (`blk_*`), and checks reply latencies.
-- Sends broadcast queries and direct `@mentions` to all specialists.
-- Validates that panel generation adheres strictly to the 60–80 word budget and condition sections.
-- Exercises card editor actions per role (passive verification, evaluative keep/cut/send-back, generative typing share).
-- Submits cards, answers check-ins, and verifies that all emitted telemetry events are tagged with `"autopilot": true`.
-
-**How to run:**
-```bash
-# Test single condition and client
-python -m app.harnesses.harness_b --condition EVA-TASK --client C2
-
-# Test all 10 experimental conditions
-python -m app.harnesses.harness_b --all-conditions
-
-# Test complete 7-client session to exit screen
-python -m app.harnesses.harness_b --condition GEN-DEV --full-session
-```
-*Outputs a structured execution report (`harness_b_report.json`).*
-
----
-
-### 3.5 `tests/` — Automated Test Suite
-**Intention & Purpose:**
-The `tests/` directory contains an automated test suite (70 tests across 13 test modules) using `pytest`. It verifies backend mechanics, security guarantees, data integrity, API routes, operational maintenance tools, and boundary invariants.
-
-#### Test Modules:
-- `test_config_loader.py`: Validates YAML parsing, condition mappings, private files, and timer scaling.
-- `test_event_store.py`: Tests append-only SQL triggers (rejecting UPDATE/DELETE), atomic single-use session locks, optimistic versioning, and CSV/JSON export formatting.
-- `test_state_machine.py`: Tests forward-only page flows, NOAI page skips, break triggers, 7th client alone mode, Latin square condition balancing, and wall-clock deadlines.
-- `test_card_provenance.py`: Validates span tracking, keep/cut/send-back actions, and strict generative typed share enforcement.
-- `test_chat_router.py`: Tests `@mention` parsing, broadcast aliases, fuzzy typo suggestions, and folded block grouping.
-- `test_agents_and_mock.py`: Verifies specialist structured outputs, orchestrator burst planning, and panel word budget guardrails.
-- `test_practice.py`: Tests scripted onboarding exercises and wrong role-check redirect penalties.
-- `test_session_manager.py`: Tests session resume rules, 15-minute gap timeouts, chat streaming, and check-in validation.
-- `test_api_endpoints.py`: Tests FastAPI routes, signed session cookies, desktop vs mobile filtering, rate limiting, and admin token authorization.
-- `test_harnesses.py`: Programmatic execution of Harness A and Harness B.
-- `test_terminal.py`: Validates ANSI stripping fallback, Windows VT console color detection, and colorize helpers.
-- `test_theme.py`: Validates theme styling tokens and UI accessibility rules.
-- `test_bugs_and_improvements.py`: Dedicated regression tests for all review findings (lock decoupling, panel validator/trim, strict typed share, opening bursts, randomized check-in option ordering, signed entry links, PII redaction, and database backup verification).
-
-**How to run tests:**
-```bash
-# Run all tests (70 total)
-pytest tests -v
-
-# Run a specific test file
-pytest tests/test_event_store.py -v
-
-# Run with stdout output enabled
-pytest tests -s
-```
-
----
-
-### 3.6 `requirements.txt` — Python Dependencies Breakdown
-**Intention & Purpose:**
-`requirements.txt` lists all external Python packages required to run and test the portal.
-
-| Package | Purpose |
-| :--- | :--- |
-| `fastapi` | High-performance ASGI web framework providing HTTP routes and NDJSON chat streaming. |
-| `uvicorn` | Production-ready ASGI server for serving the FastAPI application. |
-| `starlette` | Core ASGI toolkit underlying FastAPI (used for request handling and test client). |
-| `jinja2` | Template engine for rendering participant-facing HTML pages. |
-| `python-multipart` | Parser for handling HTML form submissions. |
-| `pydantic` | Data validation and schema enforcement for structured LLM outputs. |
-| `pyyaml` | Parser for loading `config.yaml`, `conditions.yaml`, and Markdown frontmatter. |
-| `httpx` | Async HTTP client used by the test client, Claude HTTP streaming, and web requests. |
-| `openai` | Official client library for talking to OpenAI-compatible LLM endpoints (ChatGPT, DeepSeek, GLM, Qwen). |
-| `anthropic` | Official client library for interacting with Anthropic Claude models. |
-| `pytest` | Test execution framework for running the automated unit and integration suite. |
-| `colorama` | Cross-platform colored terminal text support on Windows (Anaconda Prompt, cmd.exe). |
-| `markdown` | Markdown parsing and HTML compilation for documentation export. |
-| `xhtml2pdf` | HTML/CSS to PDF rendering engine for generating standalone PDF documentation. |
-
-> [!TIP]
-> **Anaconda Prompt & Windows Terminal Colors:**
-> The application automatically initializes Windows console color handling at startup (`app.terminal.init_terminal()`). In Anaconda Prompt and `cmd.exe`, it activates Windows Virtual Terminal (VT) processing and `colorama` so that Uvicorn server logs and harness reports display in vibrant colors without raw escape artifacts (such as `←[32m`, `←[0m`, `←[36m`, `←[1m`). If colors are not supported (e.g. redirected log files or non-VT terminals), a built-in fallback cleanly omits and strips all ANSI escape codes.
-
-**Installation:**
-```bash
-pip install -r requirements.txt
-```
-
----
-
-### 3.7 `md_to_pdf.py` — Markdown-to-PDF Documentation Exporter
-**Intention & Purpose:**
-`md_to_pdf.py` converts Markdown documentation files into styled, publication-ready A4 PDF documents. It formats headings, tables, callout banners, and code blocks with running headers, footers, and page numbers.
-
-**Usage:**
-```bash
-# Convert README.md to README.pdf (default)
-python md_to_pdf.py
-
-# Convert any custom Markdown file
-python md_to_pdf.py docs/guide.md docs/guide.pdf
-```
-
----
-
-### 3.8 `app_build/` — Autonomous Generation Sandbox (For AI Pipeline Builds)
-**Intention & Purpose:**
-The `app_build/` directory is an isolated sandbox workspace designated for the autonomous developer pipeline (`/startcycle`). When the full-stack developer agent is tasked with building a brand new application, tool, or prototype from scratch, it writes all generated files (such as `package.json`, `app.py`, HTML templates, or React components) directly into this folder.
-
-**Distinction Between `app/` and `app_build/`:**
-- **`app/` (Production Platform Code)**: Contains the real, active Interaction Portal source code (FastAPI routing, SQLite telemetry event store, specialist agents, and study state machine). All Python module imports (`from app...`) and automated tests depend on this exact package name.
-- **`app_build/` (Isolated Sandbox)**: Serves exclusively as the destination folder for newly generated autonomous builds. It isolates external generated code so that the AI cannot accidentally overwrite or corrupt the core Interaction Portal files in `app/`.
-- **Note on Antigravity Conventions**: `app_build/` is not a built-in Antigravity engine keyword or requirement. It is an architectural convention established from the Google Codelab pipeline to provide safe code scaffolding.
-
----
-
-### 3.9 `production_artifacts/` — Inter-Agent Handover Documents
-**Intention & Purpose:**
-The `production_artifacts/` directory stores structured handover deliverables exchanged between autonomous agents. 
-
-**Workflow & Human Approval Gates:**
-1. During the `/startcycle` workflow, the Product Manager (`@pm`) drafts a technology-agnostic technical specification and saves it to `production_artifacts/Technical_Specification.md`.
-2. The agent pauses execution and waits for explicit user review and approval before any code is generated.
-3. Once approved, the Full-Stack Engineer (`@engineer`) and Quality Assurance (`@qa`) read the approved specification from this directory to guide implementation and auditing.
-
----
-
-### 3.10 `.agents/` — Antigravity Agentic AI & Hermes Learning Loop
-**Intention & Purpose:**
-The `.agents/` directory is natively recognized by Google Antigravity. It houses specialized agent personas, modular procedural skills, always-on behavioral rules, and a self-improving memory subsystem inspired by Nous Research's Hermes Agent.
-
-**Subdirectories & Components:**
-- `.agents/agents/`: Individual persona instruction files defining goals, behavioral traits, and constraints for `@pm`, `@engineer`, `@qa`, and `@devops`.
-- `.agents/skills/`: Modular on-demand capabilities formatted with YAML frontmatter. These automatically register custom slash commands:
-  - `/startcycle`: Orchestrates the four-stage autonomous development lifecycle.
-  - `/learn`: Distills a successful workflow or multi-step procedure from experience into a reusable skill.
-  - `/refine`: Patches and enhances an existing skill when errors or revised parameters are encountered.
-  - `/recall`: Searches across memory files, session history, and skills to retrieve past context.
-  - `/consolidate`: Reviews conversation turns, updates user preferences and project memory, and archives a session digest.
-- `.agents/rules/`: Always-on rules loaded on every turn:
-  - `hermes_learning_loop.md`: Prompts pre-turn context checks and post-turn self-reflection nudges.
-  - `hermes_memory_protocol.md`: Enforces data hygiene, generalization, and fact verification standards.
-- `.agents/memory/`: Persistent cross-session memory store:
-  - `USER.md`: Deepening profile of the human collaborator (background, preferences, tone rules, evolving notes).
-  - `MEMORY.md`: Durable project knowledge base (architectural invariants, environment paths, known gotchas).
-  - `sessions/`: Chronological session digests capturing key milestones and decisions.
-- `.agents/scripts/`: Standalone helper tools:
-  - `hermes_memory_search.py`: Zero-dependency Python search script for querying memories and skills.
-
----
-
-### 3.11 `GEMINI.md` — Project Guidelines for Agentic Pair Programming
-**Intention & Purpose:**
-Located in the project root, `GEMINI.md` provides an immediate, plain Markdown orientation for the Antigravity pair programmer upon opening the workspace. It documents the project purpose, key run commands (`uvicorn`, `pytest`), full directory structure, and development conventions.
-
----
-
-## 4. Production Deployment & Database Administration
-
-This section covers laboratory production configuration with Qualtrics, server security hardening, reverse proxy setup, and automated database maintenance. If you simply want to test or demo the application locally, refer to the [Quick Start Guide](#quick-start-how-to-run-the-application-step-by-step-guide) at the top of this document.
-
-### 4.1 Production Deployment with Qualtrics
-In production, participants arrive via Qualtrics with their assigned `pid` and condition code in the query parameters:
-```text
-http://<host>:8000/?pid=R_123456789&condition=EVA-TASK
-```
-
-#### Production Security Requirements:
-When `PORTAL_STANDALONE` is `0` (or `PORTAL_ENV=production`), the application enforces strict production safeguards at startup. The server will refuse to start if secrets equal known development defaults or are shorter than 24 characters. Ensure you configure cryptographically random strings for:
-- `PORTAL_SECRET_KEY` (minimum 24 characters)
-- `PORTAL_ADMIN_TOKEN` (minimum 24 characters)
-- `PORTAL_COMPLETION_SECRET` (minimum 24 characters)
-
-#### Setting Environment Variables:
-
-**On Linux / macOS:**
-```bash
-# Disable standalone mode (requires pid and condition query parameters)
-export PORTAL_STANDALONE="0"
-
-# Configure LLM provider (openai, claude, deepseek, glm, qwen) and corresponding API key
-export PORTAL_LLM_PROVIDER="openai"
-export OPENAI_API_KEY="sk-..."
-# (Or set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, or DASHSCOPE_API_KEY)
-
-# Configure secure session cookie signing key and data export token
-export PORTAL_SECRET_KEY="generate-a-secure-random-secret-key-min-24-chars"
-export PORTAL_ADMIN_TOKEN="generate-a-secure-admin-token-min-24-chars"
-export PORTAL_COMPLETION_SECRET="generate-a-secure-completion-secret-min-24-chars"
-
-# Optional: Host and port (default is 127.0.0.1:8000)
-# export PORTAL_HOST="127.0.0.1"
-# export PORTAL_PORT="8000"
-
-# Launch using production single-worker ASGI server
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
-```
-
-**In Windows PowerShell:**
-```powershell
-# Disable standalone mode (requires pid and condition query parameters)
-$env:PORTAL_STANDALONE="0"
-
-# Configure LLM provider (openai, claude, deepseek, glm, qwen) and corresponding API key
-$env:PORTAL_LLM_PROVIDER="openai"
-$env:OPENAI_API_KEY="sk-..."
-# (Or set $env:ANTHROPIC_API_KEY, $env:DEEPSEEK_API_KEY, $env:GLM_API_KEY, or $env:DASHSCOPE_API_KEY)
-
-# Configure secure session cookie signing key and data export token
-$env:PORTAL_SECRET_KEY="generate-a-secure-random-secret-key-min-24-chars"
-$env:PORTAL_ADMIN_TOKEN="generate-a-secure-admin-token-min-24-chars"
-$env:PORTAL_COMPLETION_SECRET="generate-a-secure-completion-secret-min-24-chars"
-
-# Optional: Host and port (default is 127.0.0.1:8000)
-# $env:PORTAL_HOST="127.0.0.1"
-# $env:PORTAL_PORT="8000"
-
-python -m app.main
-```
-
-**In Windows Command Prompt (cmd.exe):**
-```cmd
-:: Disable standalone mode (requires pid and condition query parameters)
-set PORTAL_STANDALONE=0
-
-:: Configure LLM provider (openai, claude, deepseek, glm, qwen) and corresponding API key
-set PORTAL_LLM_PROVIDER=openai
-set OPENAI_API_KEY=sk-...
-:: (Or set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GLM_API_KEY, or DASHSCOPE_API_KEY)
-
-:: Configure secure session cookie signing key and data export token
-set PORTAL_SECRET_KEY=generate-a-secure-random-secret-key-min-24-chars
-set PORTAL_ADMIN_TOKEN=generate-a-secure-admin-token-min-24-chars
-set PORTAL_COMPLETION_SECRET=generate-a-secure-completion-secret-min-24-chars
-
-python -m app.main
-```
-
-#### Production Architecture & Deployment Considerations:
-
-1. **Single-Worker Requirement (`WEB_CONCURRENCY=1`, `uvicorn --workers 1`):**
-   Participant session state, optimistic versioning, lock decoupling, and background exchange orchestration are managed in-process. The server strictly enforces single-worker execution at startup and rejects startup if `WEB_CONCURRENCY > 1`. Scaling across concurrent participants in a laboratory run is handled by FastAPI's asynchronous event loop and decoupled thread pool, not multiple OS worker processes.
-
-2. **Reverse Proxy Configuration (Nginx / Caddy):**
-   - **NDJSON Chat Streaming:** Streaming endpoints send `X-Accel-Buffering: no` headers. In Nginx, configure `proxy_buffering off;` and `proxy_read_timeout 120s;` for the `/api/chat/stream` path to prevent buffering of live streaming tokens.
-   - **Forwarded Headers:** When running behind a reverse proxy, invoke Uvicorn with `--proxy-headers --forwarded-allow-ips "*"` so client IP addresses and protocol headers are propagated.
-   - **HTTPS & Secure Cookies:** If the reverse proxy terminates TLS and forwards plain HTTP upstream to Uvicorn, set `PORTAL_COOKIE_SECURE=1` (or `PORTAL_COOKIE_SECURE=true`) to ensure session cookies are marked `Secure`.
-
-3. **Signed Entry Links & Session Recovery:**
-   - **HMAC Signatures:** To prevent condition tampering, production URLs can be signed using `qualtrics.completion_code_secret`:
-     ```text
-     http://<host>:8000/?pid=R_123456789&condition=EVA-TASK&exp=1770000000&sig=<hmac_sha256>
-     ```
-     where `sig` is computed as `HMAC-SHA256(secret, f"{pid}|{condition}|{exp}")`. The server rejects expired or tampered signatures with an informative error.
-   - **Session Recovery:** Each session generates a cryptographically random `resume_token`. If a participant accidentally closes their browser tab or clears session cookies, they can resume their session within `timers.resume_gap_seconds` (default 15 minutes) via:
-     ```text
-     http://<host>:8000/?resume=<resume_token>
-     ```
-
-4. **Server-Side Completion Verification:**
-   At the end of the session, the portal redirects participants back to Qualtrics:
-   ```text
-   https://example.qualtrics.com/jfe/form/SV_demo?pid=R_123456789&code=IP2-A1B2C3D4
-   ```
-   External systems or Qualtrics Web Service survey blocks can verify completion authenticity server-side:
+4. Add the following line to the bottom to restart the server every Sunday at midnight (adjust paths as needed):
    ```bash
-   curl -H "x-admin-token: YOUR_ADMIN_TOKEN" "http://127.0.0.1:8000/verify?pid=R_123456789&code=IP2-A1B2C3D4"
-   ```
-   Returns:
-   ```json
-   {"valid": true, "end_state": "completed", "verify_count": 1}
+   0 0 * * 0 /path/to/multi_agent_chat/run_chatbot.sh
    ```
 
 ---
 
-### 4.2 Database Maintenance, Backups & Verification
+## Troubleshooting
 
-The portal includes dedicated administrative CLI tools in `app/tools/` for automated operational maintenance.
+| Problem | Solution |
+|---|---|
+| `FileNotFoundError: config.yaml` | Run `python main.py` from the project's root folder |
+| API timeout errors | Increase `api.timeout` (e.g. to `120`) or check your API endpoint is reachable |
+| Agents repeat each other | Lower each agent's `temperature` or reduce `orchestrator.max_agent_turns` |
+| Only one agent ever responds | Increase `orchestrator.min_responders` to `2`, or raise agents' `talkativeness` values |
+| Agents respond too slowly | Set `true_delay_min` and `true_delay_max` to `0.0`, or use a faster model |
+| Agents type too fast / too slow | Adjust `ui.live_typing_delay` — try `0.05` for fast or `0.15` for slow |
+| `KeyError: Missing entry 'screens....'` at start-up | A text entry was deleted or misspelled in the `screens` section of `config.yaml`; restore the entry named in the message |
+| An agent keeps answering questions directed at you | Strengthen the `agent_extra_system_prompt` (add explicit instructions to stay silent when you are addressed), or lower that agent's `talkativeness` |
+| Port 7860 is already in use | Change `ui.server_port` to any free port, e.g. `7861` |
+---
 
-#### 1. Automated Nightly Backups (`app.tools.backup`)
-Performs an online, non-blocking backup of the telemetry SQLite database using SQLite's native backup API, verifies database integrity (`PRAGMA integrity_check`), compresses the snapshot with gzip, generates a SHA-256 verification manifest, and rotates older backups based on retention policy:
+
+---
+
+## Practical Guide for Study Hosts
+
+This section explains common, everyday situations for researchers and study coordinators who host the **Interaction Portal** (inside the `interaction_portal` folder) without needing a programming background.
+
+---
+
+### 1. Automatic Startup Self-Check in the Console
+
+Whenever you start the portal from the `interaction_portal` folder with `python -m app.main`, the application automatically runs a fast, 2-second self-check of all 14 internal test suites before opening the website:
+
+* **Green Checkmark (`✓ Startup self-check: 14/14 test suites passed`)**: Everything is configured properly and ready for participants.
+
+* **Orange Warning (`⚠ Startup warning: ...`)**: If a configuration file or folder has an issue, the console prints a calm orange warning showing which check had an issue, one sentence explaining why, and one sentence explaining how to fix it. **The portal will still start** so your study is not interrupted.
+
+* **Optional Skip**: If you ever want to skip this 2-second check on startup, run `PORTAL_SKIP_STARTUP_TESTS=1 python -m app.main`.
+
+---
+
+### 2. Setting the Maximum Number of Concurrent Participants (`max_concurrent_participants`)
+
+**What this setting does:**
+
+In `interaction_portal/config/config.yaml` (under the `server:` section), the setting `max_concurrent_participants` controls how many people are allowed to work inside the portal at the exact same time. You can set this number to `30`, `100`, `300`, or any number that fits your study wave. You can also override it when starting the server by setting `PORTAL_MAX_PARTICIPANTS=300`.
+
+**What happens when the portal reaches full capacity:**
+
+Suppose you set `max_concurrent_participants: 100`, and 100 people are currently inside the portal working on their tasks. If a 101st person clicks the entry link from Qualtrics or Prolific:
+
+* The portal will **not** crash or invalidate their link.
+
+* Instead, the 101st person will see a polite waiting screen explaining that the study portal is currently at full capacity (100 active participants) and asking them to wait a moment and refresh the page.
+
+* As soon as one of the active participants finishes or leaves, the 101st person can refresh and start their session normally.
+
+**Advantages (Pros) of setting a higher limit (such as 100 or 300):**
+
+* **Faster data collection**: You can open a large wave of slots on Prolific or Qualtrics at the same time and finish collecting data in a few hours.
+
+* **Automatic internal scaling**: When you increase `max_concurrent_participants`, the portal automatically allocates more background worker threads and network connections so participants do not wait in line behind one another on your server.
+
+**Disadvantages and Warnings (Cons) of setting a higher limit (such as 100 or 300):**
+
+* **External Artificial Intelligence (AI) Provider Rate Limits**: In the AI conditions, every time one participant sends a message to the team, up to 5 AI agents process that message. For example, if 300 participants are active at the same time and each person sends 1 message per minute, your server will make up to **1,500 requests per minute** to your **Large Language Model (LLM)** (the AI text generator, such as OpenAI ChatGPT or Anthropic Claude). If your AI provider account is on a basic starter tier, the AI company will temporarily block requests when too many arrive in the same minute.
+
+* **Practical rule for AI accounts**: Before running 100 to 300 concurrent participants with a live AI model, check your usage tier in your OpenAI, Anthropic, DeepSeek, GLM, or Qwen account dashboard to make sure your account allows at least 1,500 to 3,000 requests per minute.
+
+* **Server Memory and Processor Capacity**: Hosting 300 simultaneous users requires more computer working memory, known as **Random-Access Memory (RAM)**, than hosting 30 users. Always run the built-in simulation stress test (described below) on your hosting computer before launching a large wave.
+
+---
+
+### 3. Running a Safe Simulation Stress Test (`stress_test.py`)
+
+**What it is:**
+
+Before inviting real participants (and before spending money on participant payments or AI usage), you can run a simulated stress test. The computer creates 30, 100, or 300 virtual participants that enter the portal at the exact same time, complete the practice steps, chat with the AI team, edit their campaign cards, and submit their check-in answers. It simulates realistic AI waiting times (for example, 500 to 1,000 milliseconds per call) using the offline mock model so it costs **zero money**.
+
+**How to run it from your terminal (inside the `interaction_portal` folder):**
+
+```bash
+# Test 30 concurrent participants
+python -m app.tools.stress_test --participants 30 --llm-delay-ms 500
+
+# Test 100 concurrent participants
+python -m app.tools.stress_test --participants 100 --llm-delay-ms 500
+
+# Test 300 concurrent participants
+python -m app.tools.stress_test --participants 300 --llm-delay-ms 1000
+```
+
+**How to read the result:**
+
+At the end of the test, look for `Participants Completed: 100.0%` and `Stress Test Verdict: PASSED`. If it passes, your computer and database are ready for that number of concurrent participants.
+
+---
+
+### 4. Helping a Participant Who Closed Their Browser or Lost Internet
+
+* **Same browser within 15 minutes (Automatic Recovery)**:
+
+  If a participant accidentally closes their browser tab, refreshes the page, or loses internet briefly, they can simply click their original entry link again in the **same web browser** within 15 minutes (`resume_gap_seconds: 900` in `interaction_portal/config/config.yaml`). Because their browser holds a secure session cookie and all countdown timers are saved on the server, they will automatically return to the exact screen and remaining time where they left off.
+
+* **Different browser or cleared cookies (Manual Host Recovery via Resume URL)**:
+
+  To stop two different people from sharing the same **Participant Identifier (PID)** (the unique participant code in the link, such as `pid=P101`), the portal blocks anyone who opens an already-started PID from a different browser without the session cookie. If a real participant emails you because their browser crashed and cleared their cookies, you can give them their private recovery link:
+
+  1. Open the administrator dashboard in your browser at `http://127.0.0.1:8000/admin` (or `https://your-domain.com/admin` if hosted online) and sign in with your `admin_token` (see Section 6 below).
+
+  2. Look at the **Recent Sessions** table at the bottom of the page and find the participant's PID.
+
+  3. Right-click and copy the **Resume URL** (`http://127.0.0.1:8000/?resume=...`) shown in the **Recovery** column and send that link to the participant. Clicking that link restores their session cookie and lets them continue from where they stopped.
+
+---
+
+### 5. Running the Pre-Flight Readiness Check (`preflight.py`)
+
+**What it is:**
+
+Before you publish your study link to real participants, run the pre-flight check from inside the `interaction_portal` folder. In less than 2 seconds, it verifies that your configuration files, all 10 study conditions, all 7 client briefs, all specialist private files, the database, and your AI provider key are properly set up.
+
+```bash
+python -m app.tools.preflight
+```
+
+Look for `Verdict: READY` at the bottom of the output.
+
+---
+
+### 6. Opening the Admin Dashboard (`http://127.0.0.1:8000/admin`) and Downloading Spreadsheets
+
+**Where to find the Admin Token:**
+
+The administrator dashboard is protected by a password called `admin_token` so that participants cannot see study statistics or download data.
+
+* **Default token for local testing**: In `interaction_portal/config/config.yaml` (under the `testing:` section), the default token is:
+  `admin-test-token`
+
+* **Custom token for live studies**: Before putting the server online for real participants, change `admin_token` in `interaction_portal/config/config.yaml` (or set the environment variable `PORTAL_ADMIN_TOKEN`) to a long secret password of at least 24 characters.
+
+**How to open the Admin Dashboard in your web browser:**
+
+1. Make sure the portal is running (`python -m app.main`).
+
+2. Open your web browser and go to:
+   `http://127.0.0.1:8000/admin`
+   *(Or go directly to `http://127.0.0.1:8000/admin?token=admin-test-token`, replacing `admin-test-token` with your own token if you changed it.)*
+
+3. Type your `admin_token` into the **Portal Admin Login** box and click **Sign In**. Your browser will save a login cookie for 1 hour so you can click any export button on the page.
+
+**What you can do inside the Admin Dashboard:**
+
+* **Study Overview**: Shows how many sessions are Total, Completed, Active right now, or Dropped/Timed out, alongside your configured `max_concurrent_participants` capacity.
+
+* **Condition Balance Table**: Shows how many participants have been assigned to each of the 10 experimental conditions (`PAS-COORD` through `NOAI`) and how many have finished.
+
+* **Flat Data Exports**: Click any blue button on the dashboard to download **Comma-Separated Values (CSV)** spreadsheet files that open directly in Microsoft Excel, R, Stata, SPSS, or Python:
+
+  * **Task Summary (Wide CSV)** (`http://127.0.0.1:8000/admin/export/task_summary.csv`): The easiest file for statistical analysis. Each row represents one participant's work on one client task, with pre-calculated totals for messages sent, `@mention` messages, broadcast messages, hidden items uncovered, panel views, card completion, raw and strict typed share, and post-task check-in answers (`ci1` to `ci5`).
+
+  * **Events CSV, Panels CSV, Transcripts CSV, Card Spans CSV, Check-ins CSV, and Sessions CSV**: Detailed action-by-action logs for fine-grained process analysis.
+
+---
+
+### 7. Backing Up Data and Removing Personal Information (`backup.py` and `purge_pii.py`)
+
+* **Creating a safe backup while the server is running**:
+
+  Run the following command in your terminal from inside the `interaction_portal` folder:
+
 ```bash
 python -m app.tools.backup --dest backups/ --keep 14
 ```
 
-**Automating with Cron (Linux / macOS):**
-Add to `crontab -e`:
-```cron
-0 2 * * * cd /path/to/interaction_portal && /path/to/venv/bin/python -m app.tools.backup --dest backups/ --keep 14 >> logs/backup.log 2>&1
-```
+  This creates a verified, compressed copy of the database in the `backups/` folder without interrupting participants who are currently taking the study.
 
-**Automating with Windows Task Scheduler:**
-1. Open Task Scheduler $\to$ **Create Basic Task**.
-2. Trigger: Daily at 02:00.
-3. Action: Start a program.
-   - Program: `D:\Desktop\Git\multi_agent_chat\.venv\Scripts\python.exe`
-   - Arguments: `-m app.tools.backup --dest backups/ --keep 14`
-   - Start in: `D:\Desktop\Git\multi_agent_chat\interaction_portal`
+* **Scanning for and removing Personally Identifiable Information (PII)**:
 
-#### 2. Database Integrity Verification (`app.tools.verify_db`)
-Inspects the active database to ensure data integrity and structural invariants:
+  Although the orientation page instructs participants not to type personal details, a participant might still type their email address, phone number, or name into the chat or onto a card. Run the following commands from inside the `interaction_portal` folder to scan the database and replace any detected personal details with `[REDACTED_...]` tags:
+
 ```bash
-python -m app.tools.verify_db
-```
-Checks performed:
-- `PRAGMA integrity_check` and `PRAGMA foreign_key_check`.
-- Existence of append-only database triggers (`events_no_update`, `events_no_delete`).
-- Schema consistency across all required tables (`events`, `sessions`, `transcripts`, `panels`, `cards`, `assignments`).
-- Strict monotonic timestamp ordering per participant session.
+# Preview any detected personal information without changing the database
+python -m app.tools.purge_pii --dry-run
 
-#### 3. Participant PII Purging Procedure (`app.tools.purge_pii`)
-If a participant inadvertently enters personally identifiable information (such as an email, phone number, IBAN, credit card, or name) that must be redacted under data protection compliance, run the maintenance purge script:
-```bash
+# Redact detected personal information across transcripts, events, and cards
 python -m app.tools.purge_pii
 ```
-This utility:
-1. Scans transcript texts and event metadata for PII patterns.
-2. Begins an atomic database transaction.
-3. Temporarily suspends append-only triggers, redacts matching substrings with `[REDACTED_PII]`, logs an administrative audit event, and re-establishes append-only triggers.
-4. Commits the transaction and verifies trigger restoration.

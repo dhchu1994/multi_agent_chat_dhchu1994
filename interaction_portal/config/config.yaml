@@ -38,6 +38,8 @@ server:
   # Signs the session cookie. Override with PORTAL_SECRET_KEY in production.
   secret_key: "change-me-in-production"
   min_viewport_width: 900
+  # Maximum concurrent active participants allowed (override via PORTAL_MAX_PARTICIPANTS).
+  max_concurrent_participants: 100
 
 # ---------------------------------------------------------------------------
 # Model provider. One pinned model version for all five agents and the panel.

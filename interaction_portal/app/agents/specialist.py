@@ -108,29 +108,50 @@ class SpecialistAgent:
             out.card_proposal = CardProposal(field=out.card_proposal.field, text=out.card_proposal.text.strip()[: self.cfg.editor.max_span_chars])
         asked = topics.asked_about_hidden(self.spec, trigger.text) if trigger.kind in ("broadcast", "mention") else False
 
-        # Guardrail: check for unprompted disclosure of hidden material
-        if not asked and self.private.hidden_passages:
-            detected = detect_disclosure(out.reply_text, self.private.hidden_passages)
-            if detected:
-                leak_str = ", ".join(detected)
-                strict_user = user + f"\n\nCRITICAL: In your previous draft you disclosed hidden/private material ({leak_str}) without being asked. Answer WITHOUT mentioning {leak_str} or private constraints."
-                try:
-                    def retry_run() -> tuple[SpecialistOutput, LLMResult]:
-                        r_res = self.llm.complete(system, strict_user, temperature=self.cfg.llm.specialist_temperature,
-                                                  max_tokens=self.cfg.llm.specialist_max_tokens, json_mode=True, meta=meta)
-                        return SpecialistOutput.model_validate(extract_json(r_res.text)), r_res
-                    out2, res2 = call_with_retry(self.llm, self.name, retry_run, 1)
-                    out2.reply_text = clean_reply(out2.reply_text, self.name, self.cfg.all_agent_names)
-                    detected2 = detect_disclosure(out2.reply_text, self.private.hidden_passages)
-                    if not detected2:
-                        out = out2
-                        res = res2
-                        out.disclosed_hidden_items = [h for h in out.disclosed_hidden_items if h in self.private.hidden_items]
-                    else:
-                        out.reply_text = "I don't have enough information on that yet."
+        # Guardrail: check for unprompted disclosure of hidden material in both reply_text and card_proposal
+        if self.private.hidden_passages:
+            if asked:
+                detected_actual = detect_disclosure(out.reply_text, self.private.hidden_passages)
+                for hid in detected_actual:
+                    if hid in self.private.hidden_items and hid not in out.disclosed_hidden_items:
+                        out.disclosed_hidden_items.append(hid)
+            else:
+                combined_check = out.reply_text + ("\n" + out.card_proposal.text if out.card_proposal else "")
+                detected = detect_disclosure(combined_check, self.private.hidden_passages)
+                if detected:
+                    leak_str = ", ".join(detected)
+                    strict_user = user + f"\n\nCRITICAL: In your previous draft you disclosed hidden/private material ({leak_str}) without being asked. Answer WITHOUT mentioning {leak_str} or private constraints."
+                    try:
+                        def retry_run() -> tuple[SpecialistOutput, LLMResult]:
+                            r_res = self.llm.complete(system, strict_user, temperature=self.cfg.llm.specialist_temperature,
+                                                      max_tokens=self.cfg.llm.specialist_max_tokens, json_mode=True, meta=meta)
+                            return SpecialistOutput.model_validate(extract_json(r_res.text)), r_res
+                        out2, res2 = call_with_retry(self.llm, self.name, retry_run, 1)
+                        out2.reply_text = clean_reply(out2.reply_text, self.name, self.cfg.all_agent_names)
+                        if out2.card_proposal and out2.card_proposal.field not in self.spec.card_fields:
+                            out2.card_proposal = None
+                        if out2.card_proposal:
+                            out2.card_proposal = CardProposal(
+                                field=out2.card_proposal.field,
+                                text=out2.card_proposal.text.strip()[: self.cfg.editor.max_span_chars],
+                            )
+                        combined_check2 = out2.reply_text + ("\n" + out2.card_proposal.text if out2.card_proposal else "")
+                        detected2 = detect_disclosure(combined_check2, self.private.hidden_passages)
+                        if not detected2:
+                            out = out2
+                            res = res2
+                            out.disclosed_hidden_items = [h for h in out.disclosed_hidden_items if h in self.private.hidden_items]
+                        else:
+                            if detect_disclosure(out.reply_text, self.private.hidden_passages):
+                                out.reply_text = "I do not have enough information on that yet."
+                            if out.card_proposal and detect_disclosure(out.card_proposal.text, self.private.hidden_passages):
+                                out.card_proposal = None
+                            out.disclosed_hidden_items = []
+                    except Exception:
+                        if detect_disclosure(out.reply_text, self.private.hidden_passages):
+                            out.reply_text = "I do not have enough information on that yet."
+                        if out.card_proposal and detect_disclosure(out.card_proposal.text, self.private.hidden_passages):
+                            out.card_proposal = None
                         out.disclosed_hidden_items = []
-                except Exception:
-                    out.reply_text = "I don't have enough information on that yet."
-                    out.disclosed_hidden_items = []
 
         return SpecialistResult(out, res, asked)

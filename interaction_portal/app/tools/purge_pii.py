@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -93,15 +94,33 @@ def purge_pii(db_path: Path, target_pid: str | None = None, dry_run: bool = Fals
         print(f"  Transcripts with PII: {len(trans_updates)}")
         print(f"  Events with PII:      {len(event_updates)}")
 
+        # 3. Scan cards
+        q_cards = "SELECT id, pid, card FROM cards WHERE 1=1"
+        args_cards = [target_pid] if target_pid else []
+        if target_pid:
+            q_cards += " AND pid=?"
+        cards_rows = cur.execute(q_cards, args_cards).fetchall() if "cards" in {r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()} else []
+        card_updates = []
+        for r in cards_rows:
+            raw_card = r["card"] or ""
+            findings = scan_pii(raw_card)
+            if findings:
+                card_updates.append((r["id"], r["pid"], redact_pii(raw_card), findings))
+
         if dry_run:
             print("\n[DRY RUN] No database modifications made.")
             for tid, pid, _, findings in trans_updates[:10]:
-                print(f"  Transcript #{tid} (pid={pid}): {[f['type'] for f in findings]}")
+                labels = [f if isinstance(f, str) else f.get("type", str(f)) for f in findings]
+                print(f"  Transcript #{tid} (pid={pid}): {labels}")
             for eid, pid, _, findings in event_updates[:10]:
-                print(f"  Event #{eid} (pid={pid}): {[f['type'] for f in findings]}")
+                labels = [f if isinstance(f, str) else f.get("type", str(f)) for f in findings]
+                print(f"  Event #{eid} (pid={pid}): {labels}")
+            for cid_row, pid, _, findings in card_updates[:10]:
+                labels = [f if isinstance(f, str) else f.get("type", str(f)) for f in findings]
+                print(f"  Card #{cid_row} (pid={pid}): {labels}")
             return 0
 
-        if not trans_updates and not event_updates:
+        if not trans_updates and not event_updates and not card_updates:
             print("No PII records found to purge.")
             return 0
 
@@ -119,6 +138,10 @@ def purge_pii(db_path: Path, target_pid: str | None = None, dry_run: bool = Fals
             # Update events
             for eid, pid, new_meta, _ in event_updates:
                 conn.execute("UPDATE events SET metadata=? WHERE id=?;", (new_meta, eid))
+
+            # Update cards
+            for cid_row, pid, new_card, _ in card_updates:
+                conn.execute("UPDATE cards SET card=? WHERE id=?;", (new_card, cid_row))
 
             # Log audit maintenance event
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -151,7 +174,7 @@ def purge_pii(db_path: Path, target_pid: str | None = None, dry_run: bool = Fals
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Purge or redact PII from database.")
-    parser.add_argument("--db", type=str, default="data/portal.db", help="Path to database file")
+    parser.add_argument("--db", type=str, default=os.environ.get("PORTAL_DB_PATH") or ("data/portal.db" if Path("data/portal.db").exists() else str(Path(__file__).resolve().parents[2] / "logs" / "portal.sqlite3")), help="Path to database file")
     parser.add_argument("--pid", type=str, default=None, help="Specific participant ID to purge")
     parser.add_argument("--dry-run", action="store_true", help="Scan only, do not modify")
     args = parser.parse_args()

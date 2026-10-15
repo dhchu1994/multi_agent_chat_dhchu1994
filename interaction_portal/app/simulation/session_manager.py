@@ -11,10 +11,12 @@ exactly the same methods.
 from __future__ import annotations
 
 import json
+import secrets
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 from ..agents.base import AgentCallFailed, LLMClient, make_llm
@@ -49,6 +51,12 @@ class SessionManager:
         self.sm = StateMachine(cfg, store, clock)
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
+        self._last_touch: dict[str, float] = {}
+        max_p = getattr(cfg, "max_concurrent_participants", 100) or 100
+        desired_workers = min(512, max(32, max_p * 2))
+        global _POOL
+        if getattr(_POOL, "_max_workers", 16) < desired_workers:
+            _POOL = ThreadPoolExecutor(max_workers=desired_workers, thread_name_prefix="agent")
 
     # ------------------------------------------------------------------ basics
     def lock(self, pid: str) -> threading.RLock:
@@ -76,11 +84,13 @@ class SessionManager:
         """Create the session atomically. Returns None if the pid was already used."""
         state = self.sm.new_state(pid, condition, autopilot, rng)
         now_iso = utc_now_iso()
+        resume_token = secrets.token_urlsafe(24)
         row = {
             "pid": pid, "condition_code": condition, "config_version": self.cfg.config_version,
             "model_version": self.llm.model_version, "started_at": now_iso, "last_activity": now_iso,
             "specialist_order": json.dumps(state.specialist_order), "client_order": json.dumps(state.client_order),
             "autopilot": int(autopilot), "state": json.dumps(state.to_json()),
+            "resume_token": resume_token, "config_sha256": self.cfg.config_sha256,
         }
         if not self.store.create_session(row):
             return None
@@ -154,7 +164,12 @@ class SessionManager:
             self.touch(state)
             return state
 
-    def touch(self, state: SessionState) -> None:
+    def touch(self, state: SessionState, force: bool = False) -> None:
+        now = self.clock()
+        last = self._last_touch.get(state.pid, 0.0)
+        if not force and (now - last) < 10.0:
+            return
+        self._last_touch[state.pid] = now
         self.store.update_session(state.pid, last_activity=utc_now_iso())
 
     def _after_advance(self, state: SessionState) -> None:
@@ -232,10 +247,13 @@ class SessionManager:
             cid = self.sm.client_id(state)
             clean_events = []
             now_iso = utc_now_iso()
+            pack_opened_now = False
             for raw in events:
                 etype = str(raw.get("type") or raw.get("event_type") or "")
                 if etype not in CLIENT_EVENTS:
                     continue
+                if etype == "pack_open" and state.page == "practice":
+                    pack_opened_now = True
                 meta = raw.get("metadata") or {}
                 clean_meta = {}
                 for k, v in meta.items():
@@ -266,6 +284,9 @@ class SessionManager:
                     "autopilot": state.autopilot,
                     "metadata": clean_meta
                 })
+            if pack_opened_now:
+                state.practice_flags["pack_opened"] = True
+                self.save(state)
             if clean_events:
                 self.store.log_batch(clean_events)
             self.touch(state)
@@ -315,6 +336,7 @@ class SessionManager:
         d["max_span_chars"] = self.cfg.editor.max_span_chars
         d["can_submit"], d["blocked_reason"] = card.can_submit()
         d["send_back_needs_reason"] = self.cfg.editor.send_back_needs_reason
+        d["allow_paste"] = self.cfg.editor.allow_paste
         return d
 
     def _log_card_events(self, state: SessionState, events: list[dict]) -> None:
@@ -528,10 +550,11 @@ class SessionManager:
         orch.on_error = cb
         return specs, orch
 
-    def _log_reply(self, state: SessionState, cid: str, name: str, in_reply_to: str, res: SpecialistResult, text: str) -> None:
+    def _log_reply(self, state: SessionState, cid: str, name: str, in_reply_to: str, res: SpecialistResult, text: str, queue_wait_ms: int = 0) -> None:
         o = res.output
         self.logger(state).log("agent_reply", "task", cid, agent=name, in_reply_to=in_reply_to, text=text,
                                latency_first_token_ms=res.llm.first_token_ms, latency_total_ms=res.llm.total_ms,
+                               queue_wait_ms=queue_wait_ms,
                                tokens_in=res.llm.tokens_in, tokens_out=res.llm.tokens_out,
                                disclosed_items=o.disclosed_hidden_items, asked_for=res.asked_for,
                                declined=o.declined, redirected_to=o.redirect_to)
@@ -568,46 +591,52 @@ class SessionManager:
                 m = self._msg(state, cid, orch, [a.to], a.text, kind="internal", block_id=block_id)
                 sent[a.to] = m
                 self.logger(state).log("orch_message", "task", cid, to_agent=a.to, text=a.text, block_id=block_id)
-                if a.to not in chat["asked"]:
-                    chat["asked"].append(a.to)
                 yield {"type": "message", "message": m}
             targets = [s.name for s in self.cfg.specialists if s.name in sent or draft_card]
             snapshot = self.store.transcript(state.pid, cid)
             self.save(state)
 
+        t_submit = time.monotonic()
+
         def call(name: str):
+            q_wait = int((time.monotonic() - t_submit) * 1000)
             kind = "draft_card" if draft_card else "orchestrator"
-            text = sent[name]["text"] if name in sent else ""
+            text_arg = sent[name]["text"] if name in sent else ""
             try:
-                return name, specs[name].reply(snapshot, Trigger(kind, orch, text))
+                return name, specs[name].reply(snapshot, Trigger(kind, orch, text_arg)), q_wait
             except AgentCallFailed:
-                return name, None
+                return name, None, q_wait
 
-        results = list(_POOL.map(call, targets))
-
-        with self.lock(pid):
-            state = self.tick(pid)
-            if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
-                self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
-                return
-            chat = self._chat(state, cid)
-            for name, res in results:
+        futs = [_POOL.submit(call, n) for n in targets]
+        for fut in as_completed(futs):
+            name, res, q_wait = fut.result()
+            with self.lock(pid):
+                state = self.tick(pid)
+                if state.page != "task" or self.sm.client_id(state) != cid or self.sm.task_remaining(state) <= 0:
+                    self.logger(state).log("agent_discarded_late", state.page, cid, reason="task_expired_or_moved")
+                    return
+                chat = self._chat(state, cid)
                 if res is None:
                     yield {"type": "message", "message": self._failure_line(state, cid, name)}
+                    self.save(state)
                     continue
                 self._apply_proposal(state, name, res)
-                text = res.output.reply_text
+                text_out = res.output.reply_text
                 in_reply = sent[name]["id"] if name in sent else ""
-                if text:
-                    m = self._msg(state, cid, name, [orch], text, kind="internal", block_id=block_id,
+                if text_out:
+                    m = self._msg(state, cid, name, [orch], text_out, kind="internal", block_id=block_id,
                                   disclosed=res.output.disclosed_hidden_items)
-                    self._log_reply(state, cid, name, in_reply, res, text)
+                    self._log_reply(state, cid, name, in_reply, res, text_out, queue_wait_ms=q_wait)
                     if name not in chat["contributed"]:
                         chat["contributed"].append(name)
                     yield {"type": "message", "message": m}
-            self._mark_dirty(state, cid)
-            self.save(state)
-            yield {"type": "card", "card": self.card_view(state)}
+                self._mark_dirty(state, cid)
+                self.save(state)
+
+        with self.lock(pid):
+            state = self.tick(pid)
+            if state.page == "task" and self.sm.client_id(state) == cid and self.sm.task_remaining(state) > 0:
+                yield {"type": "card", "card": self.card_view(state)}
 
     def chat_open(self, pid: str) -> Iterator[dict]:
         """Opening coordination burst when the task page is first shown for a client."""
@@ -797,9 +826,11 @@ class SessionManager:
         if not force and not (chat["panel_dirty"] and (due or not chat["panel_text"])):
             return None
         _, orch = self._agents(state, cid)
+        unasked = [n for n in self.cfg.specialist_names if n not in chat["asked"] and n not in chat["contributed"]]
         try:
             res = orch.generate_panel(cond.panel_level, self.store.transcript(state.pid, cid),
-                                      self._team_status(state, cid), self._card_status(state))
+                                      self._team_status(state, cid), self._card_status(state),
+                                      unasked_specialists=unasked)
         except AgentCallFailed:
             return None
         changed = res.text != chat["panel_text"]

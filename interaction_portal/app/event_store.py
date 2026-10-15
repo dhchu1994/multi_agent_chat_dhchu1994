@@ -107,9 +107,16 @@ class EventStore:
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self._local = threading.local()
         self._mem: sqlite3.Connection | None = None
         if self.db_path == ":memory:":
             self._mem = sqlite3.connect(":memory:", check_same_thread=False)
+        else:
+            init_c = sqlite3.connect(self.db_path, timeout=30)
+            init_c.execute("PRAGMA journal_mode=WAL")
+            init_c.execute("PRAGMA synchronous=NORMAL")
+            init_c.execute("PRAGMA busy_timeout=30000")
+            init_c.close()
         with self._conn() as c:
             c.executescript(SCHEMA)
             # Schema migrations for existing databases
@@ -142,8 +149,13 @@ class EventStore:
                 if s.o._mem is not None:
                     s.c = s.o._mem
                 else:
-                    s.c = sqlite3.connect(s.o.db_path, timeout=30)
-                    s.c.execute("PRAGMA journal_mode=WAL")
+                    conn = getattr(s.o._local, "conn", None)
+                    if conn is None:
+                        conn = sqlite3.connect(s.o.db_path, timeout=30)
+                        conn.execute("PRAGMA busy_timeout=30000")
+                        conn.row_factory = sqlite3.Row
+                        s.o._local.conn = conn
+                    s.c = conn
                 s.c.row_factory = sqlite3.Row
                 return s.c
             def __exit__(s, et, ev, tb):
@@ -151,8 +163,6 @@ class EventStore:
                     s.c.commit()
                 else:
                     s.c.rollback()
-                if s.o._mem is None:
-                    s.c.close()
         return _Ctx(self)
 
     # ---- events ---------------------------------------------------------
@@ -364,6 +374,17 @@ class EventStore:
                         m.get("value", ""), m.get("duration_ms", "")])
         return out.getvalue()
 
+    def count_active_sessions(self, max_idle_seconds: float = 900.0) -> int:
+        """Count currently active sessions (not ended and active within max_idle_seconds)."""
+        cutoff_epoch = datetime.now(timezone.utc).timestamp() - max_idle_seconds
+        cutoff_iso = datetime.fromtimestamp(cutoff_epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE end_state IS NULL AND last_activity >= ?",
+                (cutoff_iso,),
+            ).fetchone()
+        return int(r["cnt"] or 0) if r else 0
+
     def sessions_csv(self) -> str:
         out = io.StringIO()
         w = csv.writer(out)
@@ -374,6 +395,63 @@ class EventStore:
                         s["started_at"], s.get("ended_at") or "", s.get("end_state") or "",
                         s["resume_count"], s.get("completion_code") or "",
                         "true" if s["autopilot"] else "false", s.get("version", 0)])
+        return out.getvalue()
+
+    def task_summary_csv(self) -> str:
+        """Wide researcher-ready table: one row per (pid, client_id) task with aggregated metrics."""
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow([
+            "pid", "condition_code", "config_version", "model_version", "autopilot",
+            "client_id", "client_position", "task_dwell_ms", "messages_sent",
+            "mention_messages", "broadcast_messages", "agent_replies", "hidden_items_disclosed",
+            "panels_shown", "fields_complete", "typed_share_raw", "typed_share_strict",
+            "ci1", "ci2", "ci3", "ci4", "ci5"
+        ])
+        sessions_by_pid = {s["pid"]: s for s in self.sessions()}
+        all_events = self.events()
+        all_cards = {(c["pid"], c["client_id"]): c["card"] for c in self.cards()}
+
+        for pid, s in sessions_by_pid.items():
+            try:
+                client_order = json.loads(s.get("client_order") or "[]")
+            except Exception:
+                client_order = []
+            p_events = [e for e in all_events if e["pid"] == pid]
+            seen_clients = list(client_order) or sorted({e["client_id"] for e in p_events if e.get("client_id")})
+            for idx, cid in enumerate(seen_clients):
+                c_evts = [e for e in p_events if e.get("client_id") == cid]
+                if not c_evts and (pid, cid) not in all_cards:
+                    continue
+                dwell_ms = sum(
+                    int(e["metadata"].get("dwell_time_ms") or 0)
+                    for e in c_evts if e["event_type"] == "page_leave" and e["page_id"] == "task"
+                )
+                msgs = [e for e in c_evts if e["event_type"] == "message_sent" and not e["metadata"].get("practice")]
+                mentions = sum(1 for e in msgs if e["metadata"].get("mention_used"))
+                broadcasts = len(msgs) - mentions
+                replies = [e for e in c_evts if e["event_type"] == "agent_reply"]
+                disclosed = sorted({
+                    item
+                    for e in replies
+                    for item in (e["metadata"].get("disclosed_items") or [])
+                })
+                panels_cnt = sum(1 for e in c_evts if e["event_type"] == "panel_shown")
+                card_obj = all_cards.get((pid, cid)) or {}
+                checkins = {
+                    e["metadata"].get("item_id"): e["metadata"].get("value", "")
+                    for e in c_evts if e["event_type"] == "checkin_answer"
+                }
+                w.writerow([
+                    pid, s["condition_code"], s["config_version"], s["model_version"],
+                    "true" if s["autopilot"] else "false", cid, idx + 1, dwell_ms,
+                    len(msgs), mentions, broadcasts, len(replies), ";".join(disclosed),
+                    panels_cnt, card_obj.get("fields_complete", ""),
+                    card_obj.get("typed_share_raw", card_obj.get("typed_share", "")),
+                    card_obj.get("typed_share_strict", ""),
+                    checkins.get("ci1", ""), checkins.get("ci2", ""), checkins.get("ci3", ""),
+                    checkins.get("ci4", ""), checkins.get("ci5", ""),
+                ])
         return out.getvalue()
 
     def export_cards_json(self) -> str:

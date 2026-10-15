@@ -294,6 +294,7 @@ class PortalConfig:
     config_sha256: str = ""
     entry_link_secret: str = ""
     require_entry_sig: bool = False
+    max_concurrent_participants: int = 100
 
     # ---- helpers --------------------------------------------------------
     def text(self, path: str, **fmt: Any) -> Any:
@@ -592,6 +593,7 @@ def load_config(config_dir: str | Path | None = None) -> PortalConfig:
         reference_pack=raw["reference_pack"]["sections"], study_title=str(raw.get("study_title", "Interaction Portal")),
         db_path=Path(os.environ.get("PORTAL_DB_PATH") or (root.parent / "logs" / "portal.sqlite3")),
         config_sha256=config_sha, entry_link_secret=entry_link_secret, require_entry_sig=require_entry_sig,
+        max_concurrent_participants=int(os.environ.get("PORTAL_MAX_PARTICIPANTS") or raw["server"].get("max_concurrent_participants", 100)),
     )
 
 

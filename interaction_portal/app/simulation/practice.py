@@ -59,6 +59,7 @@ class PracticeService:
         d = card.to_json(full=False)
         d["can_submit"], d["blocked_reason"] = True, ""
         d["send_back_needs_reason"] = self.cfg.editor.send_back_needs_reason
+        d["allow_paste"] = self.cfg.editor.allow_paste
         return d
 
     def _save_card(self, state: SessionState, card: Card) -> None:

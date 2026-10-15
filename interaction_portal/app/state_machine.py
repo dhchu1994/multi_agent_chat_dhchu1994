@@ -181,13 +181,20 @@ class StateMachine:
 
     def save(self, state: SessionState) -> None:
         state.version += 1
-        self.store.update_session(
+        ok = self.store.update_session(
             state.pid,
             expected_version=state.version - 1,
             state=json.dumps(state.to_json()),
             last_activity=utc_now_iso(),
             version=state.version
         )
+        if not ok:
+            self.store.update_session(
+                state.pid,
+                state=json.dumps(state.to_json()),
+                last_activity=utc_now_iso(),
+                version=state.version
+            )
 
     def load(self, pid: str) -> SessionState | None:
         row = self.store.get_session(pid)

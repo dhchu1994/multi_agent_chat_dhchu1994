@@ -95,7 +95,7 @@ def cleanup_old_backups(dest_dir: Path, keep: int) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Backup SQLite portal database.")
-    parser.add_argument("--db", type=str, default="data/portal.db", help="Path to database file")
+    parser.add_argument("--db", type=str, default=os.environ.get("PORTAL_DB_PATH") or ("data/portal.db" if Path("data/portal.db").exists() else str(Path(__file__).resolve().parents[2] / "logs" / "portal.sqlite3")), help="Path to database file")
     parser.add_argument("--dest", type=str, default="backups/", help="Directory to store backups")
     parser.add_argument("--keep", type=int, default=14, help="Number of backups to keep (0 = keep all)")
     args = parser.parse_args()

@@ -45,6 +45,7 @@
       btn.textContent = P.ui.done; btn.classList.remove("hidden");
       btn.onclick = async () => {
         btn.disabled = true;
+        if (window.Portal && Portal.flush) await Portal.flush();
         const url = k === "panel_read" ? "/api/practice/panel-read" : "/api/practice/done";
         const r = await Portal.post(url, {});
         if (r.error) { btn.disabled = false; flash(r.error); return; }

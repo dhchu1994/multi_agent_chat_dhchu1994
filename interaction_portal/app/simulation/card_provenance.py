@@ -168,12 +168,15 @@ class Card:
             if j2 > j1:
                 txt = new_text[j1:j2]
                 added += len(txt)
-                new = Span(self._new_id(), txt, "user", "typed", [self._h("typed", "user")])
+                new = Span(self._new_id(), txt, "user", "typed", [self._h("typed", "user", pasted=pasted)])
                 pieces.append(new)
-                events.append(self._evt(field_id, new, "type", len(txt), 0, "user"))
+                evt = self._evt(field_id, new, "type", len(txt), 0, "user")
+                if pasted:
+                    evt["pasted"] = True
+                events.append(evt)
         # Mark originals that did not survive intact as deleted for the audit trail, keep order
         survivors = {p.span_id for p in pieces}
-        graveyard = [s for s in self.fields[field_id] if s.status == "deleted"]
+        graveyard = [s for s in self.fields[field_id] if s.status in ("deleted", "superseded")]
         for s in spans:
             if s.span_id not in survivors:
                 s.status = "deleted"

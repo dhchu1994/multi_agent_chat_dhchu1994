@@ -140,11 +140,14 @@ def proportional_trim(text: str, expected_sections: list[str], max_words: int) -
             break
         target_lens[largest] -= 1
 
+    _DANGLING = {"a", "an", "the", "and", "or", "but", "to", "of", "in", "on", "for", "with", "by", "at", "from", "as", "is", "are", "that", "which"}
     parts = []
     for s in expected_sections:
         if s not in retained:
             continue
         body_words = retained[s].split()[: target_lens[s]]
+        while len(body_words) > 3 and body_words[-1].lower().rstrip(",;:") in _DANGLING:
+            body_words.pop()
         body_text = " ".join(body_words).rstrip(",;:")
         if body_text and not body_text.endswith((".", "!", "?")):
             body_text += "."
