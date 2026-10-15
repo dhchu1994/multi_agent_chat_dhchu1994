@@ -367,6 +367,7 @@ def test_claude_client_http_fallback_mocked(monkeypatch):
     mock_http_client.__exit__.return_value = None
     mock_http_client.stream.return_value = mock_response
 
+    client._http_client = mock_http_client
     with patch("httpx.Client", return_value=mock_http_client):
         res = client.complete("System", "User", temperature=0.3, max_tokens=100)
         assert res.text == '{"reply_text": "HTTP Claude"}'
@@ -381,5 +382,11 @@ def test_harness_provider_switch(tmp_path):
     passed_a, report_a = run_harness_a(client_id="C1", output_path=str(tmp_path / "a.json"), provider="mock")
     assert passed_a is True
 
-    passed_b, report_b = run_harness_b(condition="EVA-TASK", client_id="C2", output_path=str(tmp_path / "b.json"), provider="mock")
+    passed_b, report_b = run_harness_b(
+        condition="EVA-TASK",
+        client_id="C2",
+        output_path=str(tmp_path / "b.json"),
+        provider="mock",
+        db_path=tmp_path / "multi_b.sqlite3",
+    )
     assert passed_b is True

@@ -377,6 +377,7 @@ def run_harness_b(
     all_conditions: bool = False,
     output_path: str = "harness_b_report.json",
     provider: str | None = None,
+    db_path: str | Path | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     cfg = load_config(config_path)
     if provider:
@@ -384,7 +385,8 @@ def run_harness_b(
     # Scale timers down during autopilot for speed
     cfg.timer_scale = 100.0
 
-    store = EventStore(cfg.db_path)
+    target_db = db_path or cfg.db_path
+    store = EventStore(target_db)
 
     conditions_to_run = list(cfg.conditions.keys()) if all_conditions else [condition]
     all_reports: list[dict[str, Any]] = []

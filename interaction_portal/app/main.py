@@ -35,7 +35,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from .agents.pii import scan_pii
-from .config_loader import PortalConfig, load_config
+from .config_loader import PortalConfig, load_config, load_dotenv_if_present
 from .event_store import EventStore
 from .simulation.practice import PracticeService
 from .simulation.session_manager import PortalError, SessionManager
@@ -531,7 +531,9 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
             if len(attempts) >= 10:
                 return False
 
-        supplied = request.headers.get("x-admin-token", "") or request.query_params.get("token", "").strip()
+        supplied = request.headers.get("x-admin-token", "")
+        if not supplied and not request.url.path.startswith("/admin/export"):
+            supplied = request.query_params.get("token", "").strip()
         auth = request.headers.get("authorization", "")
         if not supplied and auth.lower().startswith("bearer "):
             supplied = auth[7:].strip()
@@ -558,6 +560,8 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
         active = sum(1 for s in store.sessions() if not s.get("end_state"))
         return {
             "status": "healthy",
+            "mode": "test" if cfg.standalone else "production",
+            "db_path": str(cfg.db_path),
             "db_ok": True,
             "db_size_bytes": db_size,
             "active_sessions": active,
@@ -599,6 +603,7 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
                 st_obj = {}
             res_tok = s.get("resume_token") or ""
             res_link = f"/?resume={html.escape(res_tok)}" if res_tok else ""
+            link_html = f'<a href="{res_link}">Resume URL</a>' if res_link else "-"
             recent_rows_html += (
                 f"<tr><td>{html.escape(str(s.get('pid', '')))}</td>"
                 f"<td>{html.escape(str(s.get('condition_code', '')))}</td>"
@@ -606,12 +611,20 @@ def create_app(cfg: PortalConfig | None = None, store: EventStore | None = None,
                 f"<td>{int(st_obj.get('client_index', 0)) + 1}</td>"
                 f"<td>{html.escape(str(s.get('end_state') or 'active'))}</td>"
                 f"<td>{int(s.get('resume_count') or 0)}</td>"
-                f"<td>{f'<a href="{res_link}">Resume URL</a>' if res_link else '-'}</td></tr>"
+                f"<td>{link_html}</td></tr>"
             )
+        mode_banner = (
+            f'<div class="banner banner-test"><strong>🧪 Test Mode Active:</strong> Currently viewing test database (<code>{html.escape(cfg.db_path.name)}</code>). Sessions created here will not interfere with live participant data.</div>'
+            if cfg.standalone
+            else f'<div class="banner banner-prod"><strong>🔒 Live Study Mode Active:</strong> Currently viewing production database (<code>{html.escape(cfg.db_path.name)}</code>).</div>'
+        )
         resp = HTMLResponse(f"""<!DOCTYPE html>
 <html>
 <head><title>Portal Admin Dashboard</title><style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 2rem; background: #f8fafc; color: #1e293b; }}
+.banner {{ padding: 0.9rem 1.2rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.95rem; border: 1px solid transparent; }}
+.banner-test {{ background: #fef3c7; border-color: #f59e0b; color: #92400e; }}
+.banner-prod {{ background: #ecfdf5; border-color: #10b981; color: #065f46; }}
 .card {{ background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
 .stats {{ display: flex; gap: 1rem; }}
 .stat-box {{ flex: 1; background: #f1f5f9; padding: 1rem; border-radius: 6px; text-align: center; }}
@@ -624,6 +637,7 @@ th {{ color: #475569; font-weight: 600; }}
 </style></head>
 <body>
 <h1>Interaction Portal Admin</h1>
+{mode_banner}
 <div class="card">
   <h2>Study Overview (Max Concurrent Capacity: {cfg.max_concurrent_participants})</h2>
   <div class="stats">
@@ -796,10 +810,13 @@ def run_startup_tests() -> None:
     if n_suites == 0:
         return
 
+    import tempfile
+    startup_tmp_db = Path(tempfile.gettempdir()) / f"portal_startup_{uuid.uuid4().hex[:8]}.sqlite3"
     env = os.environ.copy()
     env["PORTAL_LLM_PROVIDER"] = "mock"
     env["PORTAL_STANDALONE"] = "1"
     env["PORTAL_REQUIRE_ENTRY_SIG"] = "0"
+    env["PORTAL_DB_PATH"] = str(startup_tmp_db)
 
     t0 = time.monotonic()
     try:
@@ -812,8 +829,16 @@ def run_startup_tests() -> None:
             timeout=25,
         )
     except Exception as exc:
-        print(orange(f"⚠ Startup self-check skipped ({type(exc).__name__}). Starting portal normally..."))
+        enc = (getattr(sys.stdout, "encoding", "") or "").lower().replace("-", "")
+        warn_sym = "⚠" if enc in ("utf8", "cp65001") else "[!]"
+        print(orange(f"{warn_sym} Startup self-check skipped ({type(exc).__name__}). Starting portal normally..."))
         return
+    finally:
+        for p in startup_tmp_db.parent.glob(f"{startup_tmp_db.stem}*"):
+            try:
+                p.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     elapsed = time.monotonic() - t0
     out = (proc.stdout or "") + "\n" + (proc.stderr or "")
@@ -823,40 +848,59 @@ def run_startup_tests() -> None:
     failed_cnt = int(m_fail.group(1)) if m_fail else 0
     total_cnt = passed_cnt + failed_cnt
 
+    enc = (getattr(sys.stdout, "encoding", "") or "").lower().replace("-", "")
+    is_utf8 = enc in ("utf8", "cp65001")
+    ok_sym = "✓" if is_utf8 else "[OK]"
+    warn_sym = "⚠" if is_utf8 else "[!]"
+    bullet_sym = "•" if is_utf8 else "*"
+
     if proc.returncode == 0:
         count_label = f"{n_suites}/{n_suites} test suites ({passed_cnt}/{passed_cnt} checks)" if passed_cnt else f"{n_suites}/{n_suites} test suites"
-        print(green(f"✓ Startup self-check: {count_label} passed in {elapsed:.1f}s."))
+        print(green(f"{ok_sym} Startup self-check: {count_label} passed in {elapsed:.1f}s."))
         return
 
     # One or more tests failed: print a calm orange warning with 1-sentence reason and fix hint
     ratio = f"{passed_cnt}/{total_cnt}" if total_cnt else f"0/{n_suites}"
-    print(orange(bold(f"⚠ Startup warning: {ratio} checks passed ({failed_cnt} had an issue). The portal will still start.")))
+    print(orange(bold(f"{warn_sym} Startup warning: {ratio} checks passed ({failed_cnt} had an issue). The portal will still start.")))
 
     failure_lines: list[tuple[str, str, str]] = []
     for raw_line in out.splitlines():
         line = raw_line.strip()
-        if ".py:" in line and ("Error:" in line or "assert " in line or "FAILED" in line):
-            parts = line.split(":", 2)
-            file_part = Path(parts[0]).stem if parts else "unknown_test"
-            reason = parts[2].strip() if len(parts) >= 3 else line
-            reason_one_sentence = reason.split(". ")[0].rstrip(".") + "."
-            if len(reason_one_sentence) > 140:
-                reason_one_sentence = reason_one_sentence[:137] + "..."
-            hint = _FIX_HINTS.get(file_part, "Run 'python -m app.tools.preflight' to check your configuration files.")
-            failure_lines.append((file_part, reason_one_sentence, hint))
+        if line.startswith("FAILED "):
+            m = re.match(r"^FAILED\s+([A-Za-z0-9_./\\-]+\.py)(?:::([^\s]+))?\s*(?:-\s*(.*))?$", line)
+            if m:
+                test_file = Path(m.group(1)).stem
+                test_name = m.group(2) or ""
+                reason = m.group(3) or test_name or line
+                reason_one_sentence = reason.split(". ")[0].rstrip(".") + "."
+                if len(reason_one_sentence) > 140:
+                    reason_one_sentence = reason_one_sentence[:137] + "..."
+                hint = _FIX_HINTS.get(test_file, "Run 'python -m app.tools.preflight' to check your configuration files.")
+                failure_lines.append((test_file, reason_one_sentence, hint))
+        elif ".py:" in line and ("Error" in line or "assert " in line):
+            m = re.search(r"([A-Za-z]:[\\/][^:]+\.py|[^:\s]+\.py):(?:\d+:)?\s*(.*)", line)
+            if m:
+                test_file = Path(m.group(1)).stem
+                if test_file.startswith("test_") or test_file in _FIX_HINTS:
+                    reason = m.group(2).strip() or line
+                    reason_one_sentence = reason.split(". ")[0].rstrip(".") + "."
+                    if len(reason_one_sentence) > 140:
+                        reason_one_sentence = reason_one_sentence[:137] + "..."
+                    hint = _FIX_HINTS.get(test_file, "Run 'python -m app.tools.preflight' to check your configuration files.")
+                    failure_lines.append((test_file, reason_one_sentence, hint))
 
     seen_files: set[str] = set()
     for file_part, reason_one_sentence, hint in failure_lines:
         if file_part in seen_files:
             continue
         seen_files.add(file_part)
-        print(orange(f"  • Failed check: {file_part}"))
+        print(orange(f"  {bullet_sym} Failed check: {file_part}"))
         print(orange(f"    Why it failed: {reason_one_sentence}"))
         print(orange(f"    How to fix:    {hint}"))
 
     if not seen_files:
-        print(orange("  • Why it failed: One or more startup checks returned a non-zero status."))
-        print(orange("  • How to fix:    Run 'python -m app.tools.preflight' to verify your configuration."))
+        print(orange(f"  {bullet_sym} Why it failed: One or more startup checks returned a non-zero status."))
+        print(orange(f"  {bullet_sym} How to fix:    Run 'python -m app.tools.preflight' to verify your configuration."))
     print(orange("  Continuing to launch the Interaction Portal..."))
 
 
@@ -864,6 +908,7 @@ def main() -> None:
     import uvicorn
     from .terminal import init_terminal, supports_color
     can_color = init_terminal()
+    load_dotenv_if_present()
     run_startup_tests()
     cfg = load_config()
     uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, use_colors=can_color)

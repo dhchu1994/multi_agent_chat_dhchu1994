@@ -19,6 +19,7 @@ def test_harness_b_single_run(tmp_path):
         condition="EVA-TASK",
         client_id="C2",
         output_path=str(report_file),
+        db_path=tmp_path / "harness_b_single.sqlite3",
     )
     assert passed is True
     assert report["overall_verdict"] == "PASSED"
@@ -30,6 +31,7 @@ def test_harness_b_ten_conditions(tmp_path):
         all_conditions=True,
         client_id="C2",
         output_path=str(report_file),
+        db_path=tmp_path / "harness_b_ten.sqlite3",
     )
     assert passed is True
     assert report["overall_verdict"] == "PASSED"

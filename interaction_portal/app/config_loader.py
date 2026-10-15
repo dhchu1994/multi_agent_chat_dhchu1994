@@ -24,6 +24,63 @@ import yaml
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
+
+def load_dotenv_if_present(env_path: Path | str | None = None) -> list[Path]:
+    """Load key-value pairs from a .env file into os.environ without overwriting existing variables.
+
+    Checks the specified path or scans the current working directory, repository root,
+    and config directory in sequence. Preserves any variables already set in os.environ
+    (such as variables defined on the command line or inherited from the process environment).
+    """
+    candidate_paths: list[Path] = []
+    if env_path is not None:
+        candidate_paths.append(Path(env_path).resolve())
+    else:
+        repo_root = DEFAULT_CONFIG_DIR.parent
+        for p in [Path.cwd() / ".env", repo_root / ".env", DEFAULT_CONFIG_DIR / ".env"]:
+            rp = p.resolve()
+            if rp not in candidate_paths:
+                candidate_paths.append(rp)
+
+    loaded_files: list[Path] = []
+    for path in candidate_paths:
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            if "=" not in line:
+                continue
+            key, raw_val = line.split("=", 1)
+            key = key.strip()
+            raw_val = raw_val.strip()
+            if not key:
+                continue
+
+            if (raw_val.startswith('"') and raw_val.endswith('"') and len(raw_val) >= 2) or (
+                raw_val.startswith("'") and raw_val.endswith("'") and len(raw_val) >= 2
+            ):
+                val = raw_val[1:-1]
+            else:
+                if " #" in raw_val:
+                    raw_val = raw_val.split(" #", 1)[0].strip()
+                val = raw_val.strip("\"'")
+
+            if key not in os.environ:
+                os.environ[key] = val
+        loaded_files.append(path)
+
+    return loaded_files
+
+
 _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 _HIDDEN = re.compile(r"<!--\s*hidden:([\w-]+)\s*-->\n?(.*?)\n?<!--\s*/hidden:\1\s*-->", re.DOTALL)
 
@@ -437,6 +494,7 @@ def compute_config_sha256(root: Path) -> str:
 
 
 def load_config(config_dir: str | Path | None = None) -> PortalConfig:
+    load_dotenv_if_present()
     if config_dir is None:
         root = Path(os.environ.get("PORTAL_CONFIG_DIR") or DEFAULT_CONFIG_DIR).resolve()
     else:
@@ -591,7 +649,7 @@ def load_config(config_dir: str | Path | None = None) -> PortalConfig:
         prompts=prompts, pages=pages, practice=raw["practice"], autopilot=raw.get("autopilot", {}),
         qualtrics=raw["qualtrics"], orchestrator=raw["orchestrator"],
         reference_pack=raw["reference_pack"]["sections"], study_title=str(raw.get("study_title", "Interaction Portal")),
-        db_path=Path(os.environ.get("PORTAL_DB_PATH") or (root.parent / "logs" / "portal.sqlite3")),
+        db_path=Path(os.environ.get("PORTAL_DB_PATH") or (root.parent / "logs" / ("portal_test.sqlite3" if standalone else "portal.sqlite3"))),
         config_sha256=config_sha, entry_link_secret=entry_link_secret, require_entry_sig=require_entry_sig,
         max_concurrent_participants=int(os.environ.get("PORTAL_MAX_PARTICIPANTS") or raw["server"].get("max_concurrent_participants", 100)),
     )

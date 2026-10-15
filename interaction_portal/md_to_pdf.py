@@ -31,10 +31,33 @@ def preprocess_markdown(text: str) -> str:
         "└──": "\\-- ",
         "├─": "|- ",
         "└─": "\\- ",
+        "┌": "+",
+        "┐": "+",
+        "└": "+",
+        "┘": "+",
+        "├": "+",
+        "┤": "+",
+        "┬": "+",
+        "┴": "+",
+        "┼": "+",
         "│": "|",
         "─": "-",
+        "▼": "v",
+        "▲": "^",
+        "►": ">",
+        "◄": "<",
         "←": "<-",
         "→": "->",
+        "↓": "v",
+        "↑": "^",
+        "✓": "[OK]",
+        "✔": "[OK]",
+        "⚠": "[!]",
+        "✕": "[X]",
+        "✖": "[X]",
+        "🧪": "[TEST]",
+        "🔒": "[PROD]",
+        "📋": "[PLAN]",
         "×": "x",
         "•": "*",
         "–": "-",
@@ -63,6 +86,28 @@ def preprocess_markdown(text: str) -> str:
         )
 
     text = alert_pattern.sub(alert_sub, text)
+
+    # Normalize nested list indentation (convert 2 or 3 spaces to 4 spaces)
+    normalized_lines: list[str] = []
+    in_code_block = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            normalized_lines.append(line)
+            continue
+        if not in_code_block:
+            m = re.match(r"^(\s+)([*+-]|\d+\.)\s+(.*)$", line)
+            if m:
+                spaces = len(m.group(1))
+                marker = m.group(2)
+                rest = m.group(3)
+                if spaces % 4 != 0:
+                    level = (spaces + 3) // 4
+                    new_indent = "    " * level
+                    line = f"{new_indent}{marker} {rest}"
+        normalized_lines.append(line)
+    text = "\n".join(normalized_lines)
 
     return text
 
@@ -144,6 +189,12 @@ def build_html_document(body_html: str, title: str = "Documentation") -> str:
 
     li {{
         margin-bottom: 3px;
+    }}
+
+    li ul, li ol {{
+        margin-top: 2px;
+        margin-bottom: 2px;
+        padding-left: 16px;
     }}
 
     code {{

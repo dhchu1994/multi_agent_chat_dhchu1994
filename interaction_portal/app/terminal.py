@@ -183,6 +183,18 @@ def init_terminal(safe_fallback: bool = True) -> bool:
         return supports_color()
     _INITIALIZED = True
 
+    # 0. Ensure UTF-8 output encoding on Windows consoles
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     # 1. Try colorama (if installed, e.g. Anaconda Prompt)
     colorama_ok = False
     try:

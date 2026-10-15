@@ -68,3 +68,49 @@ def test_text_lookup():
     assert text == "Continue"
     with pytest.raises(KeyError):
         cfg.text("nonexistent.key.path")
+
+
+def test_load_dotenv_if_present(tmp_path, monkeypatch):
+    from app.config_loader import load_dotenv_if_present
+    import os
+
+    monkeypatch.delenv("CUSTOM_TEST_VAR_A", raising=False)
+    monkeypatch.delenv("CUSTOM_TEST_VAR_B", raising=False)
+    monkeypatch.delenv("CUSTOM_TEST_VAR_C", raising=False)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# Comment line\n"
+        "CUSTOM_TEST_VAR_A=hello_world\n"
+        "export CUSTOM_TEST_VAR_B=\"quoted value with spaces\"\n"
+        "CUSTOM_TEST_VAR_C='single quoted' # inline comment\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_dotenv_if_present(env_file)
+    assert len(loaded) == 1
+    assert os.environ.get("CUSTOM_TEST_VAR_A") == "hello_world"
+    assert os.environ.get("CUSTOM_TEST_VAR_B") == "quoted value with spaces"
+    assert os.environ.get("CUSTOM_TEST_VAR_C") == "single quoted"
+
+
+def test_dotenv_does_not_overwrite_command_line_env(tmp_path, monkeypatch):
+    from app.config_loader import load_dotenv_if_present
+    import os
+
+    monkeypatch.setenv("EXISTING_VAR_CLI", "cli_value")
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("EXISTING_VAR_CLI=dotenv_value\n", encoding="utf-8")
+
+    load_dotenv_if_present(env_file)
+    # The existing CLI/process environment variable must be preserved
+    assert os.environ.get("EXISTING_VAR_CLI") == "cli_value"
+
+
+def test_load_config_precedence(monkeypatch):
+    # Command-line / process env overrides YAML configuration
+    monkeypatch.setenv("PORTAL_PORT", "9099")
+    cfg = load_config()
+    assert cfg.port == 9099
+
